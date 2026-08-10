@@ -1,0 +1,18 @@
+name: mydent-210057
+
+services:
+  mydent-sqlserver-210057:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: mydent-sqlserver-210057
+    environment:
+      ACCEPT_EULA: Y
+      SA_PASSWORD: ${DB_SA_PASSWORD}
+    ports:
+      - "${DB_PORT:-1435}:1433"
+    expose:
+      - "1433"
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+
+volumes:
+  sqlserver_data:

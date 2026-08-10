@@ -1,0 +1,24 @@
+## .NET build output
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.dbmdl
+
+## Visual Studio / Rider
+.vs/
+.idea/
+
+## EF Core / local DB files
+*.mdf
+*.ldf
+*.ndf
+
+## Secrets — real .env never committed, .env.example stays tracked
+.env
+!.env.example
+
+## OS
+Thumbs.db
+.DS_Store
