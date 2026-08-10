@@ -1,21 +1,4 @@
 {
 	"version": "2.0.0",
-	"tasks": [
-		{
-			"label": "sqlproj: Build fit",
-			"type": "process",
-			"command": "dotnet",
-			"args": [
-				"build",
-				"/Users/amel/faculty/FIT-RS2-2026/MyDent/fit/fit.sqlproj"
-			],
-			"problemMatcher": "$sqlproj-problem-matcher",
-			"isBackground": true,
-			"group": {
-				"kind": "build",
-				"isDefault": true
-			},
-			"detail": "Builds the fit SQL project"
-		}
-	]
+	"tasks": []
 }

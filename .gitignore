@@ -10,6 +10,9 @@ obj/
 .vs/
 .idea/
 
+## Claude Code local session/tool config — machine-specific, not part of the project
+.claude/
+
 ## EF Core / local DB files
 *.mdf
 *.ldf
