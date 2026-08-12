@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Linq.Dynamic.Core;
+using Microsoft.EntityFrameworkCore;
 
 namespace MyDent.Services
 {
@@ -78,13 +79,16 @@ namespace MyDent.Services
 
         public virtual async Task<TResponse> GetByIdAsync(int id)
         {
-            var entity = this._dbContext.Set<TEntity>().Find(id);
+            IQueryable<TEntity> query = this._dbContext.Set<TEntity>();
+            query = await IncludeRelatedEntitiesAsync(null, query);
+
+            var entity = await query.FirstOrDefaultAsync(e => EF.Property<int>(e, "Id") == id);
             if (entity == null)
             {
                 throw new KeyNotFoundException($"{typeof(TEntity).Name} with id {id} not found.");
             }
 
-            return await Task.FromResult(_mapper.Map<TResponse>(entity));
+            return _mapper.Map<TResponse>(entity);
         }
     }
 }

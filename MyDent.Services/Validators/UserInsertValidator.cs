@@ -33,6 +33,10 @@ namespace MyDent.Services.Validators
             RuleFor(x => x.PhoneNumber)
                 .MaximumLength(20).WithMessage("Phone number cannot exceed 20 characters.")
                 .When(x => !string.IsNullOrEmpty(x.PhoneNumber));
+
+            RuleFor(x => x.ProfileImageAssetId)
+                .GreaterThan(0).WithMessage("ProfileImageAssetId must be greater than 0.")
+                .When(x => x.ProfileImageAssetId.HasValue);
         }
     }
 }

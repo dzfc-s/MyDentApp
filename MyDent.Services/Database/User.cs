@@ -47,6 +47,10 @@ namespace MyDent.Services.Database
         [ForeignKey("ProfileImageAssetId")]
         public Asset? ProfileImage { get; set; }
 
+        public bool EmailNotificationsEnabled { get; set; } = true;
+
+        public bool PushNotificationsEnabled { get; set; } = true;
+
         // Navigation property for the many-to-many relationship with Role
         public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
 

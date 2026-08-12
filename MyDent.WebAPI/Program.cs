@@ -50,8 +50,28 @@ builder.Services.AddMapster();
 TypeAdapterConfig<User, UserResponse>.NewConfig().IgnoreNullValues(true);
 TypeAdapterConfig<UserUpdateRequest, User>.NewConfig().IgnoreNullValues(true);
 TypeAdapterConfig<Asset, AssetResponse>.NewConfig().IgnoreNullValues(true);
+TypeAdapterConfig<ServiceCategory, ServiceCategoryResponse>.NewConfig().IgnoreNullValues(true);
+TypeAdapterConfig<Doctor, DoctorResponse>.NewConfig().IgnoreNullValues(true);
+// Doctor/ServiceCategory navigation properties are only populated when the query
+// used .Include(...) (true for GET, not right after Insert/Update) — guard against
+// null so an immediate create/update response doesn't crash, it just shows "".
+TypeAdapterConfig<DoctorSpecialty, DoctorSpecialtyResponse>.NewConfig()
+    .Map(dest => dest.DoctorName, src => src.Doctor != null ? src.Doctor.FirstName + " " + src.Doctor.LastName : string.Empty)
+    .Map(dest => dest.ServiceCategoryName, src => src.ServiceCategory != null ? src.ServiceCategory.Name : string.Empty);
+TypeAdapterConfig<DoctorWorkingHours, DoctorWorkingHoursResponse>.NewConfig()
+    .Map(dest => dest.DoctorName, src => src.Doctor != null ? src.Doctor.FirstName + " " + src.Doctor.LastName : string.Empty);
+TypeAdapterConfig<DoctorAbsence, DoctorAbsenceResponse>.NewConfig()
+    .Map(dest => dest.DoctorName, src => src.Doctor != null ? src.Doctor.FirstName + " " + src.Doctor.LastName : string.Empty);
+TypeAdapterConfig<DentalService, DentalServiceResponse>.NewConfig()
+    .Map(dest => dest.ServiceCategoryName, src => src.ServiceCategory != null ? src.ServiceCategory.Name : string.Empty);
+TypeAdapterConfig<Appointment, AppointmentResponse>.NewConfig()
+    .Map(dest => dest.PatientName, src => src.Patient != null ? src.Patient.FirstName + " " + src.Patient.LastName : string.Empty)
+    .Map(dest => dest.DoctorName, src => src.Doctor != null ? src.Doctor.FirstName + " " + src.Doctor.LastName : string.Empty)
+    .Map(dest => dest.DentalServiceName, src => src.DentalService != null ? src.DentalService.Name : string.Empty);
+TypeAdapterConfig<AppointmentStatusHistory, AppointmentStatusHistoryResponse>.NewConfig()
+    .Map(dest => dest.ChangedByUserName, src => src.ChangedByUser != null ? src.ChangedByUser.FirstName + " " + src.ChangedByUser.LastName : string.Empty);
 
-// TODO: add TypeAdapterConfig entries for dental-domain entities (Doctor, Patient, Service, Appointment, ...) here
+// TODO: add TypeAdapterConfig entries for the remaining dental-domain entities (Review, Notification, News, Payment, ...) here
 
 // register application services
 builder.Services.AddScoped<IUserService, UserService>();
@@ -64,14 +84,37 @@ builder.Services.AddScoped<IAccessManager, AccessManager>();
 
 builder.Services.AddScoped<ICryptoService, CryptoService>();
 
-// TODO: register dental-domain services (IDoctorService, IPatientService, IAppointmentService, ...) here
+builder.Services.AddScoped<IServiceCategoryService, ServiceCategoryService>();
+builder.Services.AddScoped<IDoctorService, DoctorService>();
+builder.Services.AddScoped<IDoctorSpecialtyService, DoctorSpecialtyService>();
+builder.Services.AddScoped<IDoctorWorkingHoursService, DoctorWorkingHoursService>();
+builder.Services.AddScoped<IDoctorAbsenceService, DoctorAbsenceService>();
+builder.Services.AddScoped<IDentalServiceService, DentalServiceService>();
+builder.Services.AddScoped<IAppointmentService, AppointmentService>();
+
+// TODO: register remaining dental-domain services (Review, Notification, News, Payment, ...) here
 
 builder.Services.AddScoped<IValidator<UserInsertRequest>, UserInsertValidator>();
 builder.Services.AddScoped<IValidator<UserUpdateRequest>, UserUpdateValidator>();
 builder.Services.AddScoped<IValidator<AssetInsertRequest>, AssetInsertValidator>();
 builder.Services.AddScoped<IValidator<AssetUpdateRequest>, AssetUpdateValidator>();
 
-// TODO: register dental-domain validators here
+builder.Services.AddScoped<IValidator<ServiceCategoryInsertRequest>, ServiceCategoryInsertValidator>();
+builder.Services.AddScoped<IValidator<ServiceCategoryUpdateRequest>, ServiceCategoryUpdateValidator>();
+
+builder.Services.AddScoped<IValidator<DoctorInsertRequest>, DoctorInsertValidator>();
+builder.Services.AddScoped<IValidator<DoctorUpdateRequest>, DoctorUpdateValidator>();
+builder.Services.AddScoped<IValidator<DoctorSpecialtyInsertRequest>, DoctorSpecialtyInsertValidator>();
+builder.Services.AddScoped<IValidator<DoctorSpecialtyUpdateRequest>, DoctorSpecialtyUpdateValidator>();
+builder.Services.AddScoped<IValidator<DoctorWorkingHoursInsertRequest>, DoctorWorkingHoursInsertValidator>();
+builder.Services.AddScoped<IValidator<DoctorWorkingHoursUpdateRequest>, DoctorWorkingHoursUpdateValidator>();
+builder.Services.AddScoped<IValidator<DoctorAbsenceInsertRequest>, DoctorAbsenceInsertValidator>();
+builder.Services.AddScoped<IValidator<DoctorAbsenceUpdateRequest>, DoctorAbsenceUpdateValidator>();
+builder.Services.AddScoped<IValidator<DentalServiceInsertRequest>, DentalServiceInsertValidator>();
+builder.Services.AddScoped<IValidator<DentalServiceUpdateRequest>, DentalServiceUpdateValidator>();
+builder.Services.AddScoped<IValidator<AppointmentInsertRequest>, AppointmentInsertValidator>();
+
+// TODO: register remaining dental-domain validators here
 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
@@ -88,6 +131,11 @@ builder.Services.AddAuthentication(options => // dodavanje authentfikacije i aut
         ValidIssuer = builder.Configuration["JwtToken:Issuer"],
         ValidAudience = builder.Configuration["JwtToken:Audience"],
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["JwtToken:SecretKey"] ?? string.Empty)),
+        // AccessManager issues the role claim as "Role" (ClaimNames.Role), not the
+        // ClaimTypes.Role URI ASP.NET Core's role checks (incl. [Authorize(Roles=...)] and
+        // ClaimsPrincipal.IsInRole) expect by default. Without this, every role check silently
+        // fails — nothing exercised [Authorize(Roles=...)] until the Appointments controller.
+        RoleClaimType = ClaimNames.Role,
         ValidateIssuer = true,
         ValidateAudience = true,
         ValidateLifetime = true,

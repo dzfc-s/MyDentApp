@@ -92,7 +92,12 @@ namespace MyDent.Services
         /// </summary>
         public virtual async Task<TResponse> UpdateAsync(int id, TUpdateRequest request)
         {
-            var validationResult = await _updateValidator.ValidateAsync(request);
+            // Route id is exposed to validators via RootContextData so update validators can
+            // run identity-aware checks (e.g. overlap checks that must exclude the current row)
+            // even though the update request itself doesn't carry the entity's id.
+            var validationContext = new ValidationContext<TUpdateRequest>(request);
+            validationContext.RootContextData["Id"] = id;
+            var validationResult = await _updateValidator.ValidateAsync(validationContext);
             if (validationResult.IsValid == false)
             {
                 var errors = validationResult.Errors.Select(e => _mapper.Map<ValidationFailure>(e));

@@ -50,7 +50,9 @@ namespace MyDent.Services.Database
                     IsActive = true,
                     CreatedAt = new DateTime(2026, 3, 9, 0, 0, 0, DateTimeKind.Utc),
                     LastLoginAt = (DateTime?)null,
-                    PhoneNumber = (string?)null
+                    PhoneNumber = (string?)null,
+                    EmailNotificationsEnabled = true,
+                    PushNotificationsEnabled = true
                 },
                 new
                 {
@@ -64,7 +66,9 @@ namespace MyDent.Services.Database
                     IsActive = true,
                     CreatedAt = new DateTime(2026, 3, 9, 0, 0, 0, DateTimeKind.Utc),
                     LastLoginAt = (DateTime?)null,
-                    PhoneNumber = (string?)null
+                    PhoneNumber = (string?)null,
+                    EmailNotificationsEnabled = true,
+                    PushNotificationsEnabled = true
                 },
                 new
                 {
@@ -78,7 +82,9 @@ namespace MyDent.Services.Database
                     IsActive = true,
                     CreatedAt = new DateTime(2026, 3, 9, 0, 0, 0, DateTimeKind.Utc),
                     LastLoginAt = (DateTime?)null,
-                    PhoneNumber = (string?)null
+                    PhoneNumber = (string?)null,
+                    EmailNotificationsEnabled = true,
+                    PushNotificationsEnabled = true
                 },
                 new
                 {
@@ -92,7 +98,9 @@ namespace MyDent.Services.Database
                     IsActive = true,
                     CreatedAt = new DateTime(2026, 3, 9, 0, 0, 0, DateTimeKind.Utc),
                     LastLoginAt = (DateTime?)null,
-                    PhoneNumber = (string?)null
+                    PhoneNumber = (string?)null,
+                    EmailNotificationsEnabled = true,
+                    PushNotificationsEnabled = true
                 },
                 new
                 {
@@ -106,7 +114,9 @@ namespace MyDent.Services.Database
                     IsActive = true,
                     CreatedAt = new DateTime(2026, 3, 9, 0, 0, 0, DateTimeKind.Utc),
                     LastLoginAt = (DateTime?)null,
-                    PhoneNumber = (string?)null
+                    PhoneNumber = (string?)null,
+                    EmailNotificationsEnabled = true,
+                    PushNotificationsEnabled = true
                 }
             );
         }

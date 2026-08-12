@@ -38,8 +38,15 @@ public abstract class BaseCRUDController<TResponse, TSearch, TInsertRequest, TUp
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<TResponse>> Update(int id, [FromBody] TUpdateRequest request)
     {
-        var result = await _service.UpdateAsync(id, request);
-        return result;
+        try
+        {
+            var result = await _service.UpdateAsync(id, request);
+            return result;
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
     }
 
     [HttpDelete("{id}")]
@@ -47,7 +54,14 @@ public abstract class BaseCRUDController<TResponse, TSearch, TInsertRequest, TUp
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Delete(int id)
     {
-         await _service.DeleteAsync(id);
-        return NoContent();
+        try
+        {
+            await _service.DeleteAsync(id);
+            return NoContent();
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
     }
 }
