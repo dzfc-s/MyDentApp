@@ -20,6 +20,9 @@ namespace MyDent.Services.Database
 
         public bool IsActive { get; set; } = true;
 
+        // Null = no recurring-checkup reminder generated for this category.
+        public int? RecommendedRecallMonths { get; set; }
+
         public ICollection<DentalService> DentalServices { get; set; } = new List<DentalService>();
         public ICollection<DoctorSpecialty> DoctorSpecialties { get; set; } = new List<DoctorSpecialty>();
     }

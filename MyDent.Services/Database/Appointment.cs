@@ -53,6 +53,11 @@ namespace MyDent.Services.Database
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+        // Set once the corresponding reminder has actually been sent — the reminder background
+        // service uses these to avoid re-sending on every poll tick.
+        public DateTime? Reminder24hSentAt { get; set; }
+        public DateTime? Reminder2hSentAt { get; set; }
+
         public ICollection<AppointmentStatusHistory> StatusHistory { get; set; } = new List<AppointmentStatusHistory>();
         public Review? Review { get; set; }
         public Payment? Payment { get; set; }

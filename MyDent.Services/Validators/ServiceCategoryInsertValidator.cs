@@ -13,6 +13,10 @@ namespace MyDent.Services.Validators
 
             RuleFor(x => x.Description)
                 .MaximumLength(500).WithMessage("Description cannot exceed 500 characters.");
+
+            RuleFor(x => x.RecommendedRecallMonths)
+                .GreaterThan(0).WithMessage("RecommendedRecallMonths must be greater than 0.")
+                .When(x => x.RecommendedRecallMonths.HasValue);
         }
     }
 }

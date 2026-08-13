@@ -41,6 +41,10 @@ builder.Services.AddDbContext<MyDentDbContext>(options =>
     options.UseSqlServer(connectionString)
 );
 
+// Stripe.net reads this static config on every API call it makes (PaymentService), so it only
+// needs to be set once here rather than passed around.
+Stripe.StripeConfiguration.ApiKey = builder.Configuration["Stripe:SecretKey"];
+
 // register Mapster for object mapping
 builder.Services.AddMapster();
 
@@ -49,6 +53,11 @@ builder.Services.AddMapster();
 // ensures any custom rules or future needs can be added here.
 TypeAdapterConfig<User, UserResponse>.NewConfig().IgnoreNullValues(true);
 TypeAdapterConfig<UserUpdateRequest, User>.NewConfig().IgnoreNullValues(true);
+// ReviewUpdateRequest fields are all nullable (Rating/Comment for the patient, IsApproved for
+// Admin — each side only sends what it's allowed to touch). Without this, Mapster maps an
+// omitted (null) field onto the entity's non-nullable property as its default (false/0),
+// silently wiping whatever was already there.
+TypeAdapterConfig<ReviewUpdateRequest, Review>.NewConfig().IgnoreNullValues(true);
 TypeAdapterConfig<Asset, AssetResponse>.NewConfig().IgnoreNullValues(true);
 TypeAdapterConfig<ServiceCategory, ServiceCategoryResponse>.NewConfig().IgnoreNullValues(true);
 TypeAdapterConfig<Doctor, DoctorResponse>.NewConfig().IgnoreNullValues(true);
@@ -70,8 +79,21 @@ TypeAdapterConfig<Appointment, AppointmentResponse>.NewConfig()
     .Map(dest => dest.DentalServiceName, src => src.DentalService != null ? src.DentalService.Name : string.Empty);
 TypeAdapterConfig<AppointmentStatusHistory, AppointmentStatusHistoryResponse>.NewConfig()
     .Map(dest => dest.ChangedByUserName, src => src.ChangedByUser != null ? src.ChangedByUser.FirstName + " " + src.ChangedByUser.LastName : string.Empty);
-
-// TODO: add TypeAdapterConfig entries for the remaining dental-domain entities (Review, Notification, News, Payment, ...) here
+// Review has no direct FK to Doctor/Patient/DentalService — these are reached through the
+// Appointment navigation, which is itself only populated when .Include(...) was used, so every
+// level of the chain needs its own null check.
+TypeAdapterConfig<Review, ReviewResponse>.NewConfig()
+    .Map(dest => dest.DoctorName, src => src.Appointment != null && src.Appointment.Doctor != null ? src.Appointment.Doctor.FirstName + " " + src.Appointment.Doctor.LastName : string.Empty)
+    .Map(dest => dest.DentalServiceName, src => src.Appointment != null && src.Appointment.DentalService != null ? src.Appointment.DentalService.Name : string.Empty)
+    .Map(dest => dest.PatientName, src => src.Appointment != null && src.Appointment.Patient != null ? src.Appointment.Patient.FirstName + " " + src.Appointment.Patient.LastName : string.Empty);
+TypeAdapterConfig<Notification, NotificationResponse>.NewConfig()
+    .Map(dest => dest.UserName, src => src.User != null ? src.User.FirstName + " " + src.User.LastName : string.Empty)
+    .Map(dest => dest.ServiceCategoryName, src => src.ServiceCategory != null ? src.ServiceCategory.Name : string.Empty);
+TypeAdapterConfig<News, NewsResponse>.NewConfig()
+    .Map(dest => dest.CreatedByUserName, src => src.CreatedByUser != null ? src.CreatedByUser.FirstName + " " + src.CreatedByUser.LastName : string.Empty);
+TypeAdapterConfig<Payment, PaymentResponse>.NewConfig()
+    .Map(dest => dest.PatientName, src => src.Appointment != null && src.Appointment.Patient != null ? src.Appointment.Patient.FirstName + " " + src.Appointment.Patient.LastName : string.Empty)
+    .Map(dest => dest.DoctorName, src => src.Appointment != null && src.Appointment.Doctor != null ? src.Appointment.Doctor.FirstName + " " + src.Appointment.Doctor.LastName : string.Empty);
 
 // register application services
 builder.Services.AddScoped<IUserService, UserService>();
@@ -91,8 +113,13 @@ builder.Services.AddScoped<IDoctorWorkingHoursService, DoctorWorkingHoursService
 builder.Services.AddScoped<IDoctorAbsenceService, DoctorAbsenceService>();
 builder.Services.AddScoped<IDentalServiceService, DentalServiceService>();
 builder.Services.AddScoped<IAppointmentService, AppointmentService>();
+builder.Services.AddScoped<IReviewService, ReviewService>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
 
-// TODO: register remaining dental-domain services (Review, Notification, News, Payment, ...) here
+builder.Services.AddScoped<INewsService, NewsService>();
+builder.Services.AddScoped<IPaymentService, PaymentService>();
+
+builder.Services.AddHostedService<MyDent.WebAPI.BackgroundServices.ReminderBackgroundService>();
 
 builder.Services.AddScoped<IValidator<UserInsertRequest>, UserInsertValidator>();
 builder.Services.AddScoped<IValidator<UserUpdateRequest>, UserUpdateValidator>();
@@ -113,8 +140,12 @@ builder.Services.AddScoped<IValidator<DoctorAbsenceUpdateRequest>, DoctorAbsence
 builder.Services.AddScoped<IValidator<DentalServiceInsertRequest>, DentalServiceInsertValidator>();
 builder.Services.AddScoped<IValidator<DentalServiceUpdateRequest>, DentalServiceUpdateValidator>();
 builder.Services.AddScoped<IValidator<AppointmentInsertRequest>, AppointmentInsertValidator>();
-
-// TODO: register remaining dental-domain validators here
+builder.Services.AddScoped<IValidator<ReviewInsertRequest>, ReviewInsertValidator>();
+builder.Services.AddScoped<IValidator<ReviewUpdateRequest>, ReviewUpdateValidator>();
+builder.Services.AddScoped<IValidator<NotificationInsertRequest>, NotificationInsertValidator>();
+builder.Services.AddScoped<IValidator<NewsInsertRequest>, NewsInsertValidator>();
+builder.Services.AddScoped<IValidator<NewsUpdateRequest>, NewsUpdateValidator>();
+builder.Services.AddScoped<IValidator<PaymentCreateIntentRequest>, PaymentCreateIntentValidator>();
 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();

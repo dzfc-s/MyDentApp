@@ -140,6 +140,12 @@ namespace MyDent.Services.Database
                 .HasForeignKey(n => n.AppointmentId)
                 .OnDelete(DeleteBehavior.SetNull);
 
+            modelBuilder.Entity<Notification>()
+                .HasOne(n => n.ServiceCategory)
+                .WithMany()
+                .HasForeignKey(n => n.ServiceCategoryId)
+                .OnDelete(DeleteBehavior.SetNull);
+
             // News
             modelBuilder.Entity<News>()
                 .HasOne(n => n.Image)

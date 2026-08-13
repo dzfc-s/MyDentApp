@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using FluentValidation;
 using FluentValidation.Results;
 using Microsoft.EntityFrameworkCore;
@@ -20,16 +16,19 @@ namespace MyDent.Services
     {
         private readonly IValidator<AppointmentInsertRequest> _insertValidator;
         private readonly IAuthenticatedUserAccessor _userAccessor;
+        private readonly INotificationService _notificationService;
 
         public AppointmentService(
             MyDentDbContext dbContext,
             MapsterMapper.IMapper mapper,
             IValidator<AppointmentInsertRequest> insertValidator,
-            IAuthenticatedUserAccessor userAccessor)
+            IAuthenticatedUserAccessor userAccessor,
+            INotificationService notificationService)
             : base(mapper, dbContext)
         {
             _insertValidator = insertValidator;
             _userAccessor = userAccessor;
+            _notificationService = notificationService;
         }
 
         protected override Task<IQueryable<Appointment>> IncludeRelatedEntitiesAsync(AppointmentSearch? search, IQueryable<Appointment> query = null!)
@@ -120,6 +119,15 @@ namespace MyDent.Services
             await AddStatusHistoryAsync(entity, AppointmentStatus.Confirmed, reason: null);
             await _dbContext.SaveChangesAsync();
 
+            await _notificationService.InsertAsync(new NotificationInsertRequest
+            {
+                UserId = entity.PatientId,
+                Title = "Termin potvrđen",
+                Message = $"Vaš termin zakazan za {entity.ScheduledAt:dd.MM.yyyy. 'u' HH:mm} je potvrđen.",
+                Type = NotificationType.AppointmentConfirmed,
+                AppointmentId = entity.Id
+            });
+
             return _mapper.Map<AppointmentResponse>(entity);
         }
 
@@ -146,6 +154,21 @@ namespace MyDent.Services
 
             await AddStatusHistoryAsync(entity, AppointmentStatus.Cancelled, request.CancellationReason);
             await _dbContext.SaveChangesAsync();
+
+            var cancelMessage = $"Vaš termin zakazan za {entity.ScheduledAt:dd.MM.yyyy. 'u' HH:mm} je otkazan.";
+            if (!string.IsNullOrWhiteSpace(request.CancellationReason))
+            {
+                cancelMessage += $" Razlog: {request.CancellationReason}";
+            }
+
+            await _notificationService.InsertAsync(new NotificationInsertRequest
+            {
+                UserId = entity.PatientId,
+                Title = "Termin otkazan",
+                Message = cancelMessage,
+                Type = NotificationType.AppointmentCancelled,
+                AppointmentId = entity.Id
+            });
 
             return _mapper.Map<AppointmentResponse>(entity);
         }

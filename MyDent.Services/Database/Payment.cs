@@ -1,17 +1,10 @@
 using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using MyDent.Model.Enums;
 
 namespace MyDent.Services.Database
 {
-    public enum PaymentStatus
-    {
-        Pending,
-        Paid,
-        Failed,
-        Refunded
-    }
-
     public class Payment
     {
         [Key]
