@@ -3,6 +3,7 @@ using MyDent.Model.Requests;
 using MyDent.Model.Responses;
 using MyDent.Services;
 using MyDent.Services.Database;
+using MyDent.Services.Messaging;
 using MyDent.Services.Validators;
 using MyDent.WebAPI.Filters;
 using MyDent.WebAPI.Services;
@@ -44,6 +45,19 @@ builder.Services.AddDbContext<MyDentDbContext>(options =>
 // Stripe.net reads this static config on every API call it makes (PaymentService), so it only
 // needs to be set once here rather than passed around.
 Stripe.StripeConfiguration.ApiKey = builder.Configuration["Stripe:SecretKey"];
+
+// RabbitMQ connection settings, all from .env — the publisher itself is registered as a
+// Singleton below so its connection is opened once (lazily, on first publish) and reused.
+var rabbitMqOptions = new RabbitMqOptions
+{
+    HostName = builder.Configuration["RabbitMQ:HostName"] ?? "localhost",
+    Port = int.Parse(builder.Configuration["RabbitMQ:Port"] ?? "5672"),
+    UserName = builder.Configuration["RabbitMQ:UserName"] ?? "guest",
+    Password = builder.Configuration["RabbitMQ:Password"] ?? "guest",
+    NotificationsQueueName = builder.Configuration["RabbitMQ:NotificationsQueueName"] ?? "appointment-notifications"
+};
+builder.Services.AddSingleton(rabbitMqOptions);
+builder.Services.AddSingleton<IAppointmentEventPublisher, RabbitMqAppointmentEventPublisher>();
 
 // register Mapster for object mapping
 builder.Services.AddMapster();
@@ -118,8 +132,6 @@ builder.Services.AddScoped<INotificationService, NotificationService>();
 
 builder.Services.AddScoped<INewsService, NewsService>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
-
-builder.Services.AddHostedService<MyDent.WebAPI.BackgroundServices.ReminderBackgroundService>();
 
 builder.Services.AddScoped<IValidator<UserInsertRequest>, UserInsertValidator>();
 builder.Services.AddScoped<IValidator<UserUpdateRequest>, UserUpdateValidator>();
@@ -213,6 +225,14 @@ builder.Services.AddSwaggerGen(
     });
 
 var app = builder.Build();
+
+// Applying pending migrations on startup (idempotent — no-op if the DB is already current) so
+// `docker-compose up` brings up a working app without the reviewer running `dotnet ef database
+// update` by hand from outside the container.
+using (var scope = app.Services.CreateScope())
+{
+    scope.ServiceProvider.GetRequiredService<MyDentDbContext>().Database.Migrate();
+}
 
 // Configure the HTTP request pipeline.
 //if (app.Environment.IsDevelopment())

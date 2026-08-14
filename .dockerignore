@@ -1,0 +1,12 @@
+bin/
+obj/
+**/bin/
+**/obj/
+.vs/
+.vscode/
+.idea/
+.claude/
+.git/
+UI/
+*.user
+.env

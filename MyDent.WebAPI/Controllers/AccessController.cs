@@ -1,8 +1,10 @@
 ﻿using Azure;
 using MyDent.Model.Access;
+using MyDent.Model.Exceptions;
 using MyDent.Model.Requests;
 using MyDent.Services;
 using MyDent.WebAPI.Services.AccessManager;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MyDent.WebAPI.Controllers
@@ -13,11 +15,19 @@ namespace MyDent.WebAPI.Controllers
     {
         private readonly IAccessManager _accessManager;
         private readonly IUserService _userService;
+        private readonly IRefreshTokenService _refreshTokenService;
+        private readonly IAuthenticatedUserAccessor _userAccessor;
 
-        public AccessController(IAccessManager accessManager, IUserService userService)
+        public AccessController(
+            IAccessManager accessManager,
+            IUserService userService,
+            IRefreshTokenService refreshTokenService,
+            IAuthenticatedUserAccessor userAccessor)
         {
             _accessManager = accessManager;
             _userService = userService;
+            _refreshTokenService = refreshTokenService;
+            _userAccessor = userAccessor;
         }
 
         [HttpPost("Login")]
@@ -39,6 +49,21 @@ namespace MyDent.WebAPI.Controllers
         {
             await _userService.InsertAsync(request);
             return Ok("You have registered successfully");
+        }
+
+        // Server-side invalidation: revokes every refresh token this user has, so the session
+        // can't be silently extended via LoginWithRefreshToken after logout. The access token
+        // itself remains technically valid until it naturally expires (JwtToken__DurationInMinutes),
+        // as is normal for stateless JWTs — the client is expected to discard it, and this closes
+        // the one avenue (refresh) that would otherwise get them a fresh one without logging in again.
+        [Authorize]
+        [HttpPost("Logout")]
+        public async Task<IActionResult> Logout()
+        {
+            var userId = _userAccessor.GetUserId()
+                ?? throw new ClientException("Authenticated user could not be resolved.");
+            await _refreshTokenService.DeleteAllUserRefreshTokensAsync(userId);
+            return Ok();
         }
     }
 }

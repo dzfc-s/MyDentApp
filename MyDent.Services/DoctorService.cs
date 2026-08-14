@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.EntityFrameworkCore;
+using MyDent.Model.Enums;
 using MyDent.Model.Requests;
 using MyDent.Model.Responses;
 using MyDent.Model.SearchObjects;
@@ -13,13 +14,42 @@ namespace MyDent.Services
         : BaseCRUDService<Doctor, DoctorResponse, DoctorSearch, DoctorInsertRequest, DoctorUpdateRequest>,
           IDoctorService
     {
+        private readonly IAppointmentService _appointmentService;
+
         public DoctorService(
             MyDentDbContext dbContext,
             MapsterMapper.IMapper mapper,
             FluentValidation.IValidator<DoctorInsertRequest> insertValidator,
-            FluentValidation.IValidator<DoctorUpdateRequest> updateValidator)
+            FluentValidation.IValidator<DoctorUpdateRequest> updateValidator,
+            IAppointmentService appointmentService)
             : base(dbContext, mapper, insertValidator, updateValidator)
         {
+            _appointmentService = appointmentService;
+        }
+
+        // Deactivating a doctor (soft-delete, see BaseCRUDService.DeleteAsync) shouldn't leave
+        // patients with a future appointment nobody will show up for — cancel those first, each
+        // through the normal CancelAsync flow so the existing audit trail + notification (+ paid
+        // flag) all fire exactly as they would for a manual cancellation.
+        public override async Task DeleteAsync(int id)
+        {
+            var now = DateTime.UtcNow;
+            var affectedAppointmentIds = await _dbContext.Appointments
+                .Where(a => a.DoctorId == id
+                    && (a.Status == AppointmentStatus.Pending || a.Status == AppointmentStatus.Confirmed)
+                    && a.ScheduledAt > now)
+                .Select(a => a.Id)
+                .ToListAsync();
+
+            foreach (var appointmentId in affectedAppointmentIds)
+            {
+                await _appointmentService.CancelAsync(appointmentId, new AppointmentCancelRequest
+                {
+                    CancellationReason = "Doktor više nije dostupan. Molimo zakažite termin kod drugog doktora."
+                });
+            }
+
+            await base.DeleteAsync(id);
         }
 
         protected override Task<IQueryable<Doctor>> IncludeRelatedEntitiesAsync(DoctorSearch? search, IQueryable<Doctor> query = null!)

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.EntityFrameworkCore;
+using MyDent.Model.Enums;
 using MyDent.Model.Requests;
 using MyDent.Model.Responses;
 using MyDent.Model.SearchObjects;
@@ -13,13 +14,40 @@ namespace MyDent.Services
         : BaseCRUDService<DentalService, DentalServiceResponse, DentalServiceSearch, DentalServiceInsertRequest, DentalServiceUpdateRequest>,
           IDentalServiceService
     {
+        private readonly IAppointmentService _appointmentService;
+
         public DentalServiceService(
             MyDentDbContext dbContext,
             MapsterMapper.IMapper mapper,
             FluentValidation.IValidator<DentalServiceInsertRequest> insertValidator,
-            FluentValidation.IValidator<DentalServiceUpdateRequest> updateValidator)
+            FluentValidation.IValidator<DentalServiceUpdateRequest> updateValidator,
+            IAppointmentService appointmentService)
             : base(dbContext, mapper, insertValidator, updateValidator)
         {
+            _appointmentService = appointmentService;
+        }
+
+        // Same reasoning as DoctorService.DeleteAsync — deactivating a service shouldn't leave a
+        // future appointment booked for something that's no longer offered.
+        public override async Task DeleteAsync(int id)
+        {
+            var now = DateTime.UtcNow;
+            var affectedAppointmentIds = await _dbContext.Appointments
+                .Where(a => a.DentalServiceId == id
+                    && (a.Status == AppointmentStatus.Pending || a.Status == AppointmentStatus.Confirmed)
+                    && a.ScheduledAt > now)
+                .Select(a => a.Id)
+                .ToListAsync();
+
+            foreach (var appointmentId in affectedAppointmentIds)
+            {
+                await _appointmentService.CancelAsync(appointmentId, new AppointmentCancelRequest
+                {
+                    CancellationReason = "Usluga više nije dostupna. Molimo zakažite drugi termin."
+                });
+            }
+
+            await base.DeleteAsync(id);
         }
 
         protected override Task<IQueryable<DentalService>> IncludeRelatedEntitiesAsync(DentalServiceSearch? search, IQueryable<DentalService> query = null!)

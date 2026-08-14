@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MyDent.Model.Requests;
 using MyDent.Model.Responses;
@@ -17,6 +18,7 @@ public class DoctorSpecialtiesController
     {
     }
 
+    [Authorize(Roles = "Admin")]
     [HttpPost]
     [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -26,6 +28,7 @@ public class DoctorSpecialtiesController
         return result;
     }
 
+    [Authorize(Roles = "Admin")]
     [HttpDelete("{id}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

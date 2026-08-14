@@ -178,8 +178,13 @@ namespace MyDent.Services
 
             if (intent.Status == "succeeded")
             {
-                entity.Status = PaymentStatus.Paid;
-                entity.PaidAt = DateTime.UtcNow;
+                // Idempotent: a repeat /confirm call on an already-Paid payment must not shift
+                // PaidAt forward every time it's called.
+                if (entity.Status != PaymentStatus.Paid)
+                {
+                    entity.Status = PaymentStatus.Paid;
+                    entity.PaidAt = DateTime.UtcNow;
+                }
             }
             else if (intent.Status == "canceled")
             {

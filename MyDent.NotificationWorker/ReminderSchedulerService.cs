@@ -1,27 +1,23 @@
 using Microsoft.EntityFrameworkCore;
 using MyDent.Model.Enums;
-using MyDent.Model.Requests;
-using MyDent.Services;
 using MyDent.Services.Database;
 
-namespace MyDent.WebAPI.BackgroundServices;
+namespace MyDent.NotificationWorker;
 
+// Relocated from MyDent.WebAPI/BackgroundServices/ReminderBackgroundService.cs — a BackgroundService
+// living inside the API project doesn't satisfy the microservices requirement, so the whole
+// reminder-scheduling responsibility now runs here instead, in its own process/container.
 // Runs independently of any HTTP request to send notifications that nothing else triggers:
 // appointment reminders (24h/2h before) and recurring-checkup reminders (based on time since a
 // patient's last completed visit in a category with a RecommendedRecallMonths set).
-//
-// Registered as a singleton via AddHostedService, but MyDentDbContext/INotificationService are
-// scoped — so every tick opens its own DI scope instead of taking them as constructor
-// dependencies (which would either fail to resolve or, worse, capture one DbContext instance
-// for the app's entire lifetime).
-public class ReminderBackgroundService : BackgroundService
+public class ReminderSchedulerService : BackgroundService
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromMinutes(15);
 
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ILogger<ReminderBackgroundService> _logger;
+    private readonly ILogger<ReminderSchedulerService> _logger;
 
-    public ReminderBackgroundService(IServiceScopeFactory scopeFactory, ILogger<ReminderBackgroundService> logger)
+    public ReminderSchedulerService(IServiceScopeFactory scopeFactory, ILogger<ReminderSchedulerService> logger)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
@@ -35,16 +31,15 @@ public class ReminderBackgroundService : BackgroundService
             {
                 using var scope = _scopeFactory.CreateScope();
                 var dbContext = scope.ServiceProvider.GetRequiredService<MyDentDbContext>();
-                var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
 
-                await SendAppointmentRemindersAsync(dbContext, notificationService, stoppingToken);
-                await SendRecurringServiceRemindersAsync(dbContext, notificationService, stoppingToken);
+                await SendAppointmentRemindersAsync(dbContext, stoppingToken);
+                await SendRecurringServiceRemindersAsync(dbContext, stoppingToken);
             }
             catch (Exception ex)
             {
                 // A single bad tick (e.g. transient DB hiccup) shouldn't kill the whole
-                // background service for the rest of the app's lifetime — log and retry next interval.
-                _logger.LogError(ex, "ReminderBackgroundService tick failed.");
+                // background service for the rest of the worker's lifetime — log and retry next interval.
+                _logger.LogError(ex, "ReminderSchedulerService tick failed.");
             }
 
             try
@@ -58,8 +53,7 @@ public class ReminderBackgroundService : BackgroundService
         }
     }
 
-    private static async Task SendAppointmentRemindersAsync(
-        MyDentDbContext dbContext, INotificationService notificationService, CancellationToken cancellationToken)
+    private static async Task SendAppointmentRemindersAsync(MyDentDbContext dbContext, CancellationToken cancellationToken)
     {
         var now = DateTime.UtcNow;
 
@@ -74,13 +68,14 @@ public class ReminderBackgroundService : BackgroundService
 
         foreach (var appointment in due24h)
         {
-            await notificationService.InsertAsync(new NotificationInsertRequest
+            dbContext.Notifications.Add(new Notification
             {
                 UserId = appointment.PatientId,
                 Title = "Podsjetnik za termin",
                 Message = $"Podsjećamo vas na termin zakazan za {appointment.ScheduledAt:dd.MM.yyyy. 'u' HH:mm} (za 24h).",
                 Type = NotificationType.AppointmentReminder,
-                AppointmentId = appointment.Id
+                AppointmentId = appointment.Id,
+                CreatedAt = now
             });
 
             appointment.Reminder24hSentAt = now;
@@ -94,13 +89,14 @@ public class ReminderBackgroundService : BackgroundService
 
         foreach (var appointment in due2h)
         {
-            await notificationService.InsertAsync(new NotificationInsertRequest
+            dbContext.Notifications.Add(new Notification
             {
                 UserId = appointment.PatientId,
                 Title = "Podsjetnik za termin",
                 Message = $"Podsjećamo vas na termin zakazan za {appointment.ScheduledAt:dd.MM.yyyy. 'u' HH:mm} (za 2h).",
                 Type = NotificationType.AppointmentReminder,
-                AppointmentId = appointment.Id
+                AppointmentId = appointment.Id,
+                CreatedAt = now
             });
 
             appointment.Reminder2hSentAt = now;
@@ -109,8 +105,7 @@ public class ReminderBackgroundService : BackgroundService
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    private static async Task SendRecurringServiceRemindersAsync(
-        MyDentDbContext dbContext, INotificationService notificationService, CancellationToken cancellationToken)
+    private static async Task SendRecurringServiceRemindersAsync(MyDentDbContext dbContext, CancellationToken cancellationToken)
     {
         var categories = await dbContext.ServiceCategories
             .Where(c => c.IsActive && c.RecommendedRecallMonths.HasValue)
@@ -145,15 +140,18 @@ public class ReminderBackgroundService : BackgroundService
                     continue;
                 }
 
-                await notificationService.InsertAsync(new NotificationInsertRequest
+                dbContext.Notifications.Add(new Notification
                 {
                     UserId = visit.PatientId,
                     Title = "Vrijeme je za kontrolu",
                     Message = $"Preporučujemo da zakažete termin za \"{category.Name}\" — prošlo je {category.RecommendedRecallMonths} mjeseci od zadnje posjete.",
                     Type = NotificationType.RecurringServiceReminder,
-                    ServiceCategoryId = category.Id
+                    ServiceCategoryId = category.Id,
+                    CreatedAt = DateTime.UtcNow
                 });
             }
         }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
     }
 }

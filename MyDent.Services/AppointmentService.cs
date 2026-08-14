@@ -7,6 +7,7 @@ using MyDent.Model.Requests;
 using MyDent.Model.Responses;
 using MyDent.Model.SearchObjects;
 using MyDent.Services.Database;
+using MyDent.Services.Messaging;
 
 namespace MyDent.Services
 {
@@ -16,19 +17,19 @@ namespace MyDent.Services
     {
         private readonly IValidator<AppointmentInsertRequest> _insertValidator;
         private readonly IAuthenticatedUserAccessor _userAccessor;
-        private readonly INotificationService _notificationService;
+        private readonly IAppointmentEventPublisher _eventPublisher;
 
         public AppointmentService(
             MyDentDbContext dbContext,
             MapsterMapper.IMapper mapper,
             IValidator<AppointmentInsertRequest> insertValidator,
             IAuthenticatedUserAccessor userAccessor,
-            INotificationService notificationService)
+            IAppointmentEventPublisher eventPublisher)
             : base(mapper, dbContext)
         {
             _insertValidator = insertValidator;
             _userAccessor = userAccessor;
-            _notificationService = notificationService;
+            _eventPublisher = eventPublisher;
         }
 
         protected override Task<IQueryable<Appointment>> IncludeRelatedEntitiesAsync(AppointmentSearch? search, IQueryable<Appointment> query = null!)
@@ -119,7 +120,7 @@ namespace MyDent.Services
             await AddStatusHistoryAsync(entity, AppointmentStatus.Confirmed, reason: null);
             await _dbContext.SaveChangesAsync();
 
-            await _notificationService.InsertAsync(new NotificationInsertRequest
+            await _eventPublisher.PublishNotificationAsync(new NotificationInsertRequest
             {
                 UserId = entity.PatientId,
                 Title = "Termin potvrđen",
@@ -161,7 +162,17 @@ namespace MyDent.Services
                 cancelMessage += $" Razlog: {request.CancellationReason}";
             }
 
-            await _notificationService.InsertAsync(new NotificationInsertRequest
+            // Cancelling doesn't touch Payment at all — refunding is a deliberate Admin action
+            // (POST /Payments/{id}/refund), never automatic. This just makes sure the patient (and
+            // whoever reads the notification) knows a paid appointment needs that follow-up,
+            // instead of a paid appointment silently sitting cancelled with no visible next step.
+            var isPaid = await _dbContext.Payments.AnyAsync(p => p.AppointmentId == entity.Id && p.Status == PaymentStatus.Paid);
+            if (isPaid)
+            {
+                cancelMessage += " Uplata za ovaj termin će biti obrađena od strane klinike.";
+            }
+
+            await _eventPublisher.PublishNotificationAsync(new NotificationInsertRequest
             {
                 UserId = entity.PatientId,
                 Title = "Termin otkazan",

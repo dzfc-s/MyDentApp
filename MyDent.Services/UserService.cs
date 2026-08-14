@@ -19,10 +19,12 @@ namespace MyDent.Services
     public class UserService : BaseCRUDService<User, UserResponse, UserSearch, UserInsertRequest, UserUpdateRequest>, IUserService
     {
         private readonly ICryptoService _cryptoService;
-        public UserService(MyDentDbContext dbContext, MapsterMapper.IMapper mapper, IValidator<UserInsertRequest> insertValidator, IValidator<UserUpdateRequest> updateValidator, ICryptoService cryptoService)
+        private readonly IAuthenticatedUserAccessor _userAccessor;
+        public UserService(MyDentDbContext dbContext, MapsterMapper.IMapper mapper, IValidator<UserInsertRequest> insertValidator, IValidator<UserUpdateRequest> updateValidator, ICryptoService cryptoService, IAuthenticatedUserAccessor userAccessor)
             : base(dbContext, mapper, insertValidator, updateValidator)
         {
             _cryptoService = cryptoService;
+            _userAccessor = userAccessor;
         }
 
 
@@ -87,8 +89,30 @@ namespace MyDent.Services
             var entity = MapInsertRequestToEntity(request);
             entity.CreatedAt = DateTime.UtcNow;
 
+            // Two SaveChangesAsync calls (User needs its identity Id generated before UserRole
+            // can reference it) — wrapped in one transaction so a crash between them can't leave
+            // a User row with no role assigned.
+            await using var transaction = await _dbContext.Database.BeginTransactionAsync();
+
             _dbContext.Users.Add(entity);
             await _dbContext.SaveChangesAsync();
+
+            // Self-registration (and any other InsertAsync caller) always gets the default,
+            // least-privileged role — nothing in UserInsertRequest lets a caller pick a role.
+            // Without this, a registered user has zero UserRoles rows, so their JWT falls back
+            // to a "user" role claim that matches neither "Admin" nor "Patient" role checks.
+            var patientRole = await _dbContext.Roles.FirstOrDefaultAsync(r => r.Name == "Patient")
+                ?? throw new InvalidOperationException("Default 'Patient' role is not seeded.");
+
+            _dbContext.UserRoles.Add(new UserRole
+            {
+                UserId = entity.Id,
+                RoleId = patientRole.Id,
+                DateAssigned = DateTime.UtcNow
+            });
+            await _dbContext.SaveChangesAsync();
+
+            await transaction.CommitAsync();
 
             return _mapper.Map<UserResponse>(entity);
         }
@@ -175,7 +199,9 @@ namespace MyDent.Services
 
         public async Task ChangePasswordAsync(UserPasswordChangeRequest request)
         {
-            var user = _dbContext.Users.FirstOrDefault(u => u.Id == request.Id);
+            var userId = _userAccessor.GetUserId()
+                ?? throw new ClientException("Authenticated user could not be resolved.");
+            var user = _dbContext.Users.FirstOrDefault(u => u.Id == userId);
 
             if (user == null)
                 throw new ClientException("User not found");

@@ -134,7 +134,21 @@ namespace MyDent.Services
             if (entity == null)
                 throw new KeyNotFoundException($"{typeof(TEntity).Name} with id {id} not found.");
 
-            this._dbContext.Set<TEntity>().Remove(entity);
+            // Soft-delete: entities that track a lifecycle via IsActive get deactivated, never
+            // hard-removed — other tables may still reference their row by FK (e.g. past
+            // Appointments pointing at a Doctor/DentalService). Entities with no IsActive property
+            // have nothing to preserve (e.g. Asset, DoctorAbsence, DoctorWorkingHours) and fall
+            // back to an actual removal.
+            var isActiveProperty = entity.GetType().GetProperty("IsActive");
+            if (isActiveProperty?.CanWrite == true && isActiveProperty.PropertyType == typeof(bool))
+            {
+                isActiveProperty.SetValue(entity, false);
+            }
+            else
+            {
+                this._dbContext.Set<TEntity>().Remove(entity);
+            }
+
             await this._dbContext.SaveChangesAsync();
         }
     }

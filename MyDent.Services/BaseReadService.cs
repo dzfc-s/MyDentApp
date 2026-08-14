@@ -14,6 +14,10 @@ namespace MyDent.Services
         where TEntity : class
         where TSearch : BaseSearchObject
     {
+        // An unbounded "get all" is treated as a defect — cap how much a single request can pull
+        // back regardless of what PageSize the caller asks for.
+        private const int MaxPageSize = 100;
+
         protected readonly MapsterMapper.IMapper _mapper;
         protected readonly MyDentDbContext _dbContext;
 
@@ -49,15 +53,14 @@ namespace MyDent.Services
                 query = query.AsQueryable().OrderBy(search.SortBy);
             }
 
+            var effectivePageSize = Math.Min(search.PageSize ?? MaxPageSize, MaxPageSize);
+
             if (search.Page.HasValue)
             {
-                query = query.Skip((search.Page.Value - 1) * search.PageSize.Value);
+                query = query.Skip((search.Page.Value - 1) * effectivePageSize);
             }
 
-            if (search.PageSize.HasValue)
-            {
-                query = query.Take(search.PageSize.Value);
-            }
+            query = query.Take(effectivePageSize);
 
             var list = query.Select(item => _mapper.Map<TResponse>(item)).ToList();
 

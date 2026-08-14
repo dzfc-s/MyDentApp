@@ -9,6 +9,9 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace MyDent.WebAPI.Controllers;
 
+// Managing the user list (list all, view any profile, create/edit/delete an account) is an
+// Admin action. Public self-registration goes through AccessController.Register, not here.
+// ChangePassword is the one exception: any authenticated user changes their own password.
 [ApiController]
 [Route("[controller]")]
 public class UsersController : BaseCRUDController<UserResponse, UserSearch, UserInsertRequest, UserUpdateRequest, IUserService>
@@ -17,13 +20,27 @@ public class UsersController : BaseCRUDController<UserResponse, UserSearch, User
     {
     }
 
-    //[Authorization("Admin")]
+    [Authorize(Roles = "Admin")]
     public override Task<PageResult<UserResponse>> GetAll([FromQuery] UserSearch? search)
-    {
-        return base.GetAll(search);
-    }
+        => base.GetAll(search);
 
-    //[Authorization]
+    [Authorize(Roles = "Admin")]
+    public override Task<ActionResult<UserResponse>> GetById(int id)
+        => base.GetById(id);
+
+    [Authorize(Roles = "Admin")]
+    public override Task<ActionResult<UserResponse>> Create([FromBody] UserInsertRequest request)
+        => base.Create(request);
+
+    [Authorize(Roles = "Admin")]
+    public override Task<ActionResult<UserResponse>> Update(int id, [FromBody] UserUpdateRequest request)
+        => base.Update(id, request);
+
+    [Authorize(Roles = "Admin")]
+    public override Task<IActionResult> Delete(int id)
+        => base.Delete(id);
+
+    [Authorize]
     [HttpPut("ChangePassword")]
     public async Task<IActionResult> ChangePassword([FromBody] UserPasswordChangeRequest request)
     {

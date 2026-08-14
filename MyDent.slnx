@@ -1,6 +1,7 @@
 <Solution>
   <Project Path="MyDent.Common.Services/MyDent.Common.Services.csproj" />
   <Project Path="MyDent.Model/MyDent.Model.csproj" />
+  <Project Path="MyDent.NotificationWorker/MyDent.NotificationWorker.csproj" />
   <Project Path="MyDent.Services/MyDent.Services.csproj" />
   <Project Path="MyDent.WebAPI/MyDent.WebAPI.csproj" />
 </Solution>
