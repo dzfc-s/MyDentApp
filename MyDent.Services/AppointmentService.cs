@@ -76,6 +76,79 @@ namespace MyDent.Services
             return query;
         }
 
+        // Same rules AppointmentInsertValidator checks against one candidate ScheduledAt (working
+        // hours, absence, overlap) — here applied to generate the whole list of valid slots for a
+        // day, so the client can offer a picker instead of guess-and-check.
+        public async Task<List<AvailableSlotResponse>> GetAvailableSlotsAsync(AvailableSlotsRequest request)
+        {
+            var doctor = await _dbContext.Doctors.AsNoTracking()
+                .FirstOrDefaultAsync(d => d.Id == request.DoctorId && d.IsActive)
+                ?? throw new ClientException($"Doctor with id {request.DoctorId} does not exist or is not active.");
+
+            var dentalService = await _dbContext.DentalServices.AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Id == request.DentalServiceId && s.IsActive)
+                ?? throw new ClientException($"DentalService with id {request.DentalServiceId} does not exist or is not active.");
+
+            var isOnAbsence = await _dbContext.DoctorAbsences.AnyAsync(a =>
+                a.DoctorId == request.DoctorId &&
+                a.StartDate <= request.Date &&
+                a.EndDate >= request.Date);
+
+            if (isOnAbsence)
+            {
+                return new List<AvailableSlotResponse>();
+            }
+
+            var workingHours = await _dbContext.DoctorWorkingHours
+                .Where(w => w.DoctorId == request.DoctorId && w.DayOfWeek == request.Date.DayOfWeek)
+                .ToListAsync();
+
+            if (workingHours.Count == 0)
+            {
+                return new List<AvailableSlotResponse>();
+            }
+
+            var dayStart = request.Date.ToDateTime(TimeOnly.MinValue);
+            var dayEnd = dayStart.AddDays(1);
+
+            var existingAppointments = await _dbContext.Appointments.AsNoTracking()
+                .Where(a => a.DoctorId == request.DoctorId
+                    && a.Status != AppointmentStatus.Cancelled
+                    && a.ScheduledAt >= dayStart && a.ScheduledAt < dayEnd)
+                .Select(a => new { a.ScheduledAt, a.DurationMinutes })
+                .ToListAsync();
+
+            var duration = TimeSpan.FromMinutes(dentalService.DurationMinutes);
+            var now = DateTime.UtcNow;
+            var slots = new List<AvailableSlotResponse>();
+
+            foreach (var shift in workingHours)
+            {
+                // Slots are aligned to a grid starting at the shift's own start time, sized to
+                // this service's duration — simple and predictable (e.g. always :00/:30 for a
+                // 30-minute service), at the cost of occasionally missing an odd-sized gap between
+                // two existing appointments that doesn't land on the grid. Good enough for a
+                // clinic booking flow; a fully packed scheduler is out of scope here.
+                var slotStart = dayStart + shift.StartTime;
+                var shiftEnd = dayStart + shift.EndTime;
+
+                while (slotStart + duration <= shiftEnd)
+                {
+                    var slotEnd = slotStart + duration;
+
+                    if (slotStart > now && !existingAppointments.Any(a =>
+                        slotStart < a.ScheduledAt.AddMinutes(a.DurationMinutes) && a.ScheduledAt < slotEnd))
+                    {
+                        slots.Add(new AvailableSlotResponse { StartTime = slotStart, EndTime = slotEnd });
+                    }
+
+                    slotStart += duration;
+                }
+            }
+
+            return slots.OrderBy(s => s.StartTime).ToList();
+        }
+
         public async Task<AppointmentResponse> InsertAsync(AppointmentInsertRequest request)
         {
             var validationResult = await _insertValidator.ValidateAsync(request);

@@ -20,6 +20,17 @@ public class AppointmentsController
     {
     }
 
+    // Public, like DoctorWorkingHours/DoctorAbsences it's derived from — a visitor browsing
+    // before registering should be able to see what times are open, not just logged-in patients.
+    [AllowAnonymous]
+    [HttpGet("available-slots")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<List<AvailableSlotResponse>>> GetAvailableSlots([FromQuery] AvailableSlotsRequest request)
+    {
+        return await _service.GetAvailableSlotsAsync(request);
+    }
+
     [HttpPost]
     [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

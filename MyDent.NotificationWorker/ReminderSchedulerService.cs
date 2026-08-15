@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using MyDent.Model.Enums;
 using MyDent.Services.Database;
+using MyDent.Services.Policies;
 
 namespace MyDent.NotificationWorker;
 
@@ -113,7 +114,7 @@ public class ReminderSchedulerService : BackgroundService
 
         foreach (var category in categories)
         {
-            var cutoff = DateTime.UtcNow.AddMonths(-category.RecommendedRecallMonths!.Value);
+            var cutoff = RecallPolicy.CutoffDate(category.RecommendedRecallMonths!.Value);
 
             // Last completed visit per patient in this category, only where that visit is
             // already past the recall cutoff.

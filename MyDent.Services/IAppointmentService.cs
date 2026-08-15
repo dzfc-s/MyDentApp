@@ -11,6 +11,7 @@ namespace MyDent.Services
     // the state machine and logged to AppointmentStatusHistory.
     public interface IAppointmentService : IBaseReadService<AppointmentResponse, AppointmentSearch>
     {
+        Task<List<AvailableSlotResponse>> GetAvailableSlotsAsync(AvailableSlotsRequest request);
         Task<AppointmentResponse> InsertAsync(AppointmentInsertRequest request);
         Task<AppointmentResponse> ConfirmAsync(int id);
         Task<AppointmentResponse> CancelAsync(int id, AppointmentCancelRequest request);

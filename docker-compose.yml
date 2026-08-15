@@ -4,6 +4,7 @@ services:
   mydent-sqlserver-210057:
     image: mcr.microsoft.com/mssql/server:2022-latest
     container_name: mydent-sqlserver-210057
+    restart: unless-stopped
     environment:
       ACCEPT_EULA: Y
       SA_PASSWORD: ${DB_SA_PASSWORD}
@@ -23,6 +24,7 @@ services:
   mydent-rabbitmq-210057:
     image: rabbitmq:3.13-management
     container_name: mydent-rabbitmq-210057
+    restart: unless-stopped
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
@@ -45,6 +47,7 @@ services:
       context: .
       dockerfile: MyDent.WebAPI/Dockerfile
     container_name: mydent-api-210057
+    restart: unless-stopped
     env_file: .env
     environment:
       # Inside the compose network, services reach each other by service name, not localhost —
@@ -68,6 +71,7 @@ services:
       context: .
       dockerfile: MyDent.NotificationWorker/Dockerfile
     container_name: mydent-notification-worker-210057
+    restart: unless-stopped
     env_file: .env
     environment:
       ConnectionStrings__DefaultConnection: "Server=mydent-sqlserver-210057,1433;Database=210057;User Id=sa;Password=${DB_SA_PASSWORD};TrustServerCertificate=True;"

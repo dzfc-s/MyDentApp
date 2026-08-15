@@ -46,6 +46,10 @@ builder.Services.AddDbContext<MyDentDbContext>(options =>
 // needs to be set once here rather than passed around.
 Stripe.StripeConfiguration.ApiKey = builder.Configuration["Stripe:SecretKey"];
 
+// QuestPDF requires this to be set once at startup — Community is free (no watermark) for a
+// project like this (open-source / non-commercial, well under the revenue threshold).
+QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
+
 // RabbitMQ connection settings, all from .env — the publisher itself is registered as a
 // Singleton below so its connection is opened once (lazily, on first publish) and reused.
 var rabbitMqOptions = new RabbitMqOptions
@@ -132,6 +136,8 @@ builder.Services.AddScoped<INotificationService, NotificationService>();
 
 builder.Services.AddScoped<INewsService, NewsService>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
+builder.Services.AddScoped<IRecommenderService, RecommenderService>();
+builder.Services.AddScoped<IReportService, ReportService>();
 
 builder.Services.AddScoped<IValidator<UserInsertRequest>, UserInsertValidator>();
 builder.Services.AddScoped<IValidator<UserUpdateRequest>, UserUpdateValidator>();
