@@ -52,6 +52,20 @@ namespace MyDent.Services
                     query = query.Where(a => a.DoctorId == search.DoctorId.Value);
                 }
 
+                if (!string.IsNullOrWhiteSpace(search.PatientName))
+                {
+                    query = query.Where(a =>
+                        (a.Patient.FirstName + " " + a.Patient.LastName)
+                            .Contains(search.PatientName, StringComparison.OrdinalIgnoreCase));
+                }
+
+                if (!string.IsNullOrWhiteSpace(search.DoctorName))
+                {
+                    query = query.Where(a =>
+                        (a.Doctor.FirstName + " " + a.Doctor.LastName)
+                            .Contains(search.DoctorName, StringComparison.OrdinalIgnoreCase));
+                }
+
                 if (search.DentalServiceId.HasValue)
                 {
                     query = query.Where(a => a.DentalServiceId == search.DentalServiceId.Value);
