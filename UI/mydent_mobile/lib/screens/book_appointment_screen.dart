@@ -9,6 +9,7 @@ import '../providers/appointment_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/doctor_provider.dart';
 import '../utils/utils_widgets.dart';
+import '../widgets/asset_avatar.dart';
 import 'appointment_details_screen.dart';
 
 class BookAppointmentScreen extends StatefulWidget {
@@ -139,7 +140,17 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                       decoration: const InputDecoration(border: OutlineInputBorder()),
                       items: doctors!.items!
                           .map((d) => DropdownMenuItem(
-                              value: d, child: Text("${d.firstName} ${d.lastName}")))
+                                value: d,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    AssetAvatar(
+                                        assetId: d.photoAssetId, radius: 14),
+                                    const SizedBox(width: 10),
+                                    Text("${d.firstName} ${d.lastName}"),
+                                  ],
+                                ),
+                              ))
                           .toList(),
                       onChanged: (d) {
                         setState(() => _selectedDoctor = d);

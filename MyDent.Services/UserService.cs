@@ -118,8 +118,41 @@ namespace MyDent.Services
         }
 
 
+        public override async Task<UserResponse> GetByIdAsync(int id)
+        {
+            var user = await _dbContext.Users
+                .Include(u => u.UserRoles)
+                .ThenInclude(ur => ur.Role)
+                .FirstOrDefaultAsync(u => u.Id == id);
+
+            if (user == null)
+            {
+                throw new KeyNotFoundException($"User with id {id} not found.");
+            }
+
+            // Doctors have no User/login account in this system (see Doctor.cs) — only "Admin"
+            // and "Patient" roles exist, so the only callers here are Admin staff or the patient
+            // viewing their own record.
+            var callerId = _userAccessor.GetUserId();
+            var isSelf = callerId.HasValue && callerId.Value == id;
+            if (!isSelf && !_userAccessor.IsInRole("Admin"))
+            {
+                throw new ClientException("You can only view your own profile.");
+            }
+
+            var response = _mapper.Map<UserResponse>(user);
+            response.Role = user.UserRoles.FirstOrDefault()?.Role.Name ?? string.Empty;
+            return response;
+        }
+
         public override async Task<UserResponse> UpdateAsync(int id, UserUpdateRequest request)
         {
+            var callerId = _userAccessor.GetUserId();
+            if (callerId != id && !_userAccessor.IsInRole("Admin"))
+            {
+                throw new ClientException("You can only edit your own profile.");
+            }
+
             await _updateValidator.ValidateAndThrowAsync(request);
 
             var entity = await _dbContext.Users.FindAsync(id);

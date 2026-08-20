@@ -9,9 +9,11 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace MyDent.WebAPI.Controllers;
 
-// Managing the user list (list all, view any profile, create/edit/delete an account) is an
-// Admin action. Public self-registration goes through AccessController.Register, not here.
-// ChangePassword is the one exception: any authenticated user changes their own password.
+// Managing the full user list and creating/deleting accounts is an Admin action. Public
+// self-registration goes through AccessController.Register, not here. GetById/Update are also
+// reachable by the user themselves, for their own profile including health-record fields —
+// ownership is enforced in UserService, not here. ChangePassword is likewise any authenticated
+// user, for their own password only.
 [ApiController]
 [Route("[controller]")]
 public class UsersController : BaseCRUDController<UserResponse, UserSearch, UserInsertRequest, UserUpdateRequest, IUserService>
@@ -24,7 +26,7 @@ public class UsersController : BaseCRUDController<UserResponse, UserSearch, User
     public override Task<PageResult<UserResponse>> GetAll([FromQuery] UserSearch? search)
         => base.GetAll(search);
 
-    [Authorize(Roles = "Admin")]
+    [Authorize]
     public override Task<ActionResult<UserResponse>> GetById(int id)
         => base.GetById(id);
 
@@ -32,7 +34,7 @@ public class UsersController : BaseCRUDController<UserResponse, UserSearch, User
     public override Task<ActionResult<UserResponse>> Create([FromBody] UserInsertRequest request)
         => base.Create(request);
 
-    [Authorize(Roles = "Admin")]
+    [Authorize]
     public override Task<ActionResult<UserResponse>> Update(int id, [FromBody] UserUpdateRequest request)
         => base.Update(id, request);
 

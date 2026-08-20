@@ -14,5 +14,8 @@ namespace MyDent.Model.Responses
         public string? PhoneNumber { get; set; }
         public DateTime? UpdatedAt { get; set; }
         public int? ProfileImageAssetId { get; set; }
+        public string? Allergies { get; set; }
+        public string? BloodType { get; set; }
+        public string? MedicalNotes { get; set; }
     }
 }

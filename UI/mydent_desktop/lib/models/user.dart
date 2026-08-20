@@ -16,6 +16,9 @@ class User {
   final String? phoneNumber;
   final DateTime? updatedAt;
   final int? profileImageAssetId;
+  final String? allergies;
+  final String? bloodType;
+  final String? medicalNotes;
 
   User({
     this.id,
@@ -30,6 +33,9 @@ class User {
     this.phoneNumber,
     this.updatedAt,
     this.profileImageAssetId,
+    this.allergies,
+    this.bloodType,
+    this.medicalNotes,
   });
 
   factory User.fromJson(Map<String, dynamic> json) => _$UserFromJson(json);

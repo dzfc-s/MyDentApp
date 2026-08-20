@@ -6,6 +6,7 @@ import '../models/news.dart';
 import '../models/search_result.dart';
 import '../providers/news_provider.dart';
 import '../utils/utils_widgets.dart';
+import '../widgets/asset_thumbnail.dart';
 import 'news_details_screen.dart';
 
 class NewsList extends StatefulWidget {
@@ -80,6 +81,7 @@ class _NewsListState extends State<NewsList> {
         child: SingleChildScrollView(
           child: DataTable(
             columns: const [
+              DataColumn(label: Text("")),
               DataColumn(label: Text("Naslov")),
               DataColumn(label: Text("Autor")),
               DataColumn(label: Text("Objavljeno")),
@@ -98,6 +100,7 @@ class _NewsListState extends State<NewsList> {
                           if (refresh == "reload") initTable();
                         },
                         cells: [
+                          DataCell(AssetThumbnail(assetId: e.imageAssetId)),
                           DataCell(Text(e.title ?? '')),
                           DataCell(Text(e.createdByUserName ?? '')),
                           DataCell(Text(e.isPublished == true ? "Da" : "Ne")),

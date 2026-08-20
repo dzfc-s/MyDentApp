@@ -2,8 +2,10 @@ import 'package:MyDent_desktop/layouts/master_screen.dart';
 import 'package:MyDent_desktop/models/search_result.dart';
 import 'package:MyDent_desktop/models/user.dart';
 import 'package:MyDent_desktop/providers/user_provider.dart';
+import 'package:MyDent_desktop/screens/patient_health_record_screen.dart';
 import 'package:MyDent_desktop/screens/user_details_screen.dart';
 import 'package:MyDent_desktop/utils/utils_widgets.dart';
+import 'package:MyDent_desktop/widgets/stat_card.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -54,6 +56,10 @@ class _UserListState extends State<UserList> {
           children: [
             _buildPageHeader(theme),
             const SizedBox(height: 20),
+            if (!isLoading) ...[
+              _buildStats(theme),
+              const SizedBox(height: 20),
+            ],
             _buildSearchCard(theme),
             const SizedBox(height: 16),
             if (isLoading)
@@ -65,6 +71,34 @@ class _UserListState extends State<UserList> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildStats(ThemeData theme) {
+    final users = result?.items ?? [];
+    final active = users.where((u) => u.isActive == true).length;
+    return Row(
+      children: [
+        StatCard(
+          icon: Icons.people_alt_outlined,
+          label: "Ukupno korisnika",
+          value: users.length.toString(),
+        ),
+        const SizedBox(width: 16),
+        StatCard(
+          icon: Icons.check_circle_outline,
+          label: "Aktivni",
+          value: active.toString(),
+          color: theme.colorScheme.tertiary,
+        ),
+        const SizedBox(width: 16),
+        StatCard(
+          icon: Icons.block_outlined,
+          label: "Neaktivni",
+          value: (users.length - active).toString(),
+          color: theme.colorScheme.error,
+        ),
+      ],
     );
   }
 
@@ -261,6 +295,21 @@ class _UserListState extends State<UserList> {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        IconButton(
+                          tooltip: "Zdravstveni karton",
+                          icon: Icon(Icons.medical_information_outlined,
+                              color: theme.colorScheme.tertiary),
+                          onPressed: () async {
+                            final refresh =
+                                await Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    PatientHealthRecordScreen(patient: e),
+                              ),
+                            );
+                            if (refresh == "reload") initTable();
+                          },
+                        ),
                         IconButton(
                           tooltip: "Edit",
                           icon: Icon(Icons.edit_outlined,

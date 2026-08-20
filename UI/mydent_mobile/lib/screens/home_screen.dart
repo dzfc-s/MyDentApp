@@ -10,9 +10,11 @@ import '../providers/dental_service_provider.dart';
 import '../providers/news_provider.dart';
 import '../providers/recommendation_provider.dart';
 import '../providers/service_category_provider.dart';
+import '../theme/app_theme.dart';
 import '../utils/utils_widgets.dart';
 import '../widgets/news_detail_dialog.dart';
 import 'dental_service_details_screen.dart';
+import '../providers/auth_provider.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -134,8 +136,8 @@ class _HomeScreenState extends State<HomeScreen> {
               controller: _scrollController,
               padding: const EdgeInsets.all(16),
               children: [
-                _buildSearch(),
-                const SizedBox(height: 16),
+                _buildHero(),
+                const SizedBox(height: 20),
                 if (recommendations.isNotEmpty) ...[
                   Text("Preporučeno za vas",
                       style: Theme.of(context).textTheme.titleMedium),
@@ -170,17 +172,55 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildSearch() {
-    return TextField(
-      controller: _searchController,
-      decoration: InputDecoration(
-        hintText: 'Pretraži usluge',
-        prefixIcon: const Icon(Icons.search),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(28)),
-        filled: true,
-        fillColor: Colors.grey[200],
+  Widget _buildHero() {
+    final firstName = AuthProvider.accessTokenDecoded?['FirstName'] as String?;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.primary, Color(0xFF5B21B6)],
+        ),
       ),
-      onSubmitted: (_) => _load(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            firstName != null && firstName.isNotEmpty
+                ? "Zdravo, $firstName"
+                : "Dobrodošli",
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            "Pronađite uslugu ili zakažite termin",
+            style: TextStyle(color: Colors.white70, fontSize: 14),
+          ),
+          const SizedBox(height: 18),
+          TextField(
+            controller: _searchController,
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              hintText: 'Pretraži usluge',
+              hintStyle: const TextStyle(color: Colors.white60),
+              prefixIcon: const Icon(Icons.search, color: Colors.white70),
+              filled: true,
+              fillColor: Colors.white.withValues(alpha: 0.14),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(999),
+                borderSide: BorderSide.none,
+              ),
+            ),
+            onSubmitted: (_) => _load(),
+          ),
+        ],
+      ),
     );
   }
 

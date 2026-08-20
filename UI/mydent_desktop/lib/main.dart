@@ -57,10 +57,38 @@ class MyApp extends StatelessWidget {
   }
 }
 
-class LoginScreen extends StatelessWidget {
+class LoginScreen extends StatefulWidget {
   LoginScreen({super.key});
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  bool _isLoading = false;
+
+  Future<void> _login() async {
+    setState(() => _isLoading = true);
+    AuthProvider authProvider = Provider.of<AuthProvider>(context, listen: false);
+    try {
+      await authProvider.login(_usernameController.text, _passwordController.text);
+      if (AuthProvider.role != "Admin") {
+        authProvider.logout();
+        if (!mounted) return;
+        alertBox(context, "Pristup odbijen",
+            "Ovaj panel je namijenjen administratorima. Prijavite se putem mobilne aplikacije.");
+        return;
+      }
+      if (!mounted) return;
+      Navigator.push(context, MaterialPageRoute(builder: (context) => const AppointmentList()));
+    } on Exception catch (e) {
+      alertBox(context, "Error", e.toString());
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -78,10 +106,23 @@ class LoginScreen extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Image.network(
-                    "https://fit.ba/content/763cbb87-718d-4eca-a991-343858daf424",
-                    width: 100,
-                    height: 100,),
+                // TODO: replace with the real MyDent logo asset once available.
+                Container(
+                  width: 100,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryDark,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.medical_services_outlined,
+                      color: Colors.white, size: 48),
+                ),
+                const SizedBox(height: 8),
+                Text("MyDent",
+                    style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primary)),
                     TextField(
                       controller: _usernameController,
                       decoration: InputDecoration(
@@ -100,20 +141,14 @@ class LoginScreen extends StatelessWidget {
                     ),
                     SizedBox(height: 16.0,),
                     ElevatedButton(
-                      child: Text("Login"),
-                      onPressed: () async {
-
-                        AuthProvider authProvider = Provider.of<AuthProvider>(context, listen: false);
-                        try {
-                          await authProvider.login(_usernameController.text, _passwordController.text);
-                          if (!context.mounted) return;
-                          Navigator.push(context, MaterialPageRoute(builder: (context) => const AppointmentList()));
-                        } on Exception catch (e) {
-                          alertBox(context, "Error", e.toString());
-                        }
-                        // Handle login logic here
-                        print("Login button pressed");
-                      },
+                      onPressed: _isLoading ? null : _login,
+                      child: _isLoading
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2.5),
+                            )
+                          : const Text("Login"),
                     )
               ],
             ),),

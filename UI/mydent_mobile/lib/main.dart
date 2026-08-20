@@ -19,6 +19,7 @@ import 'providers/recommendation_provider.dart';
 import 'providers/review_provider.dart';
 import 'providers/service_category_provider.dart';
 import 'providers/user_provider.dart';
+import 'screens/register_screen.dart';
 
 void main() {
   // Publishable key only (safe client-side) — pass the real one via
@@ -65,11 +66,39 @@ class MyApp extends StatelessWidget {
   }
 }
 
-class LoginPage extends StatelessWidget {
+class LoginPage extends StatefulWidget {
   LoginPage({super.key});
+
+  @override
+  State<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  
+  bool _isLoading = false;
+
+  Future<void> _login() async {
+    setState(() => _isLoading = true);
+    try {
+      AuthProvider authProvider = Provider.of<AuthProvider>(context, listen: false);
+      await authProvider.login(_usernameController.text, _passwordController.text);
+      if (AuthProvider.role == "Admin") {
+        authProvider.logout();
+        if (!mounted) return;
+        alertBox(context, "Pristup odbijen",
+            "Administratorski nalog se koristi putem desktop aplikacije.");
+        return;
+      }
+      if (!mounted) return;
+      Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const ContainerScreen()));
+    } on Exception catch (e) {
+      alertBox(context, "Error", e.toString());
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -159,27 +188,38 @@ class LoginPage extends StatelessWidget {
                   ),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: InkWell(onTap: () async {
-                    try {
-                        AuthProvider authProvider = Provider.of<AuthProvider>(context, listen: false);
-                        await authProvider.login(_usernameController.text, _passwordController.text);
-                        if (!context.mounted) return;
-                        Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const ContainerScreen()));
-                      } on Exception catch (e) {
-                        alertBox(context, "Error", e.toString());
-                      }
-                },
-                child: Center(
-                  child: Text(
-                    'Login',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+                child: InkWell(
+                  onTap: _isLoading ? null : _login,
+                  child: Center(
+                    child: _isLoading
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text(
+                            'Login',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                   ),
-                ),),
+                ),
               ),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const RegisterScreen()),
+                );
+              },
+              child: const Text("Nemate nalog? Registrujte se"),
             ),
           ],
         ),

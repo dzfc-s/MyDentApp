@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using MyDent.Services.Database;
 
@@ -11,9 +12,11 @@ using MyDent.Services.Database;
 namespace MyDent.Services.Migrations
 {
     [DbContext(typeof(MyDentDbContext))]
-    partial class MyDentDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260820084919_AddPatientHealthRecordFields")]
+    partial class AddPatientHealthRecordFields
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

@@ -25,6 +25,9 @@ User _$UserFromJson(Map<String, dynamic> json) => User(
       ? null
       : DateTime.parse(json['updatedAt'] as String),
   profileImageAssetId: (json['profileImageAssetId'] as num?)?.toInt(),
+  allergies: json['allergies'] as String?,
+  bloodType: json['bloodType'] as String?,
+  medicalNotes: json['medicalNotes'] as String?,
 );
 
 Map<String, dynamic> _$UserToJson(User instance) => <String, dynamic>{
@@ -40,4 +43,7 @@ Map<String, dynamic> _$UserToJson(User instance) => <String, dynamic>{
   'phoneNumber': instance.phoneNumber,
   'updatedAt': instance.updatedAt?.toIso8601String(),
   'profileImageAssetId': instance.profileImageAssetId,
+  'allergies': instance.allergies,
+  'bloodType': instance.bloodType,
+  'medicalNotes': instance.medicalNotes,
 };

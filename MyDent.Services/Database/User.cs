@@ -51,6 +51,18 @@ namespace MyDent.Services.Database
 
         public bool PushNotificationsEnabled { get; set; } = true;
 
+        // Patient health record — self-editable by the patient, viewable/editable by Admin. Not
+        // meaningful for Admin accounts, but kept on User rather than a separate Patient table
+        // since patients have no dedicated table (see Doctor.cs for the contrast).
+        [MaxLength(500)]
+        public string? Allergies { get; set; }
+
+        [MaxLength(10)]
+        public string? BloodType { get; set; }
+
+        [MaxLength(2000)]
+        public string? MedicalNotes { get; set; }
+
         // Navigation property for the many-to-many relationship with Role
         public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
 

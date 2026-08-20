@@ -2,14 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/appointment.dart';
+import '../models/doctor.dart';
 import '../models/enums.dart';
 import '../models/payment.dart';
 import '../models/review.dart';
 import '../providers/appointment_provider.dart';
+import '../providers/doctor_provider.dart';
 import '../providers/payment_provider.dart';
 import '../providers/review_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/utils_widgets.dart';
+import '../widgets/asset_avatar.dart';
 import 'add_review_screen.dart';
 import 'payment_screen.dart';
 
@@ -25,6 +28,7 @@ class AppointmentDetailsScreen extends StatefulWidget {
 
 class _AppointmentDetailsScreenState extends State<AppointmentDetailsScreen> {
   Appointment? _appointment;
+  Doctor? _doctor;
   Payment? _payment;
   Review? _review;
   bool isLoading = true;
@@ -48,9 +52,21 @@ class _AppointmentDetailsScreenState extends State<AppointmentDetailsScreen> {
           .read<ReviewProvider>()
           .get(filter: {"appointmentId": widget.appointmentId});
 
+      Doctor? doctor;
+      if (appointment.doctorId != null) {
+        try {
+          doctor = await context
+              .read<DoctorProvider>()
+              .getById(appointment.doctorId!);
+        } catch (_) {
+          // Doctor lookup is only for the avatar photo — the name already came with the appointment.
+        }
+      }
+
       if (!mounted) return;
       setState(() {
         _appointment = appointment;
+        _doctor = doctor;
         _payment = payments.items?.isNotEmpty == true ? payments.items!.first : null;
         _review = reviews.items?.isNotEmpty == true ? reviews.items!.first : null;
         isLoading = false;
@@ -83,7 +99,20 @@ class _AppointmentDetailsScreenState extends State<AppointmentDetailsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _row("Doktor", a.doctorName ?? ''),
+                  Row(
+                    children: [
+                      AssetAvatar(assetId: _doctor?.photoAssetId, radius: 22),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          a.doctorName ?? '',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Divider(height: 24),
                   _row("Termin", a.scheduledAt?.toLocal().toString().substring(0, 16) ?? ''),
                   _row("Trajanje", "${a.durationMinutes} min"),
                   _row("Cijena", "${a.price} KM"),
@@ -173,14 +202,21 @@ class _AppointmentDetailsScreenState extends State<AppointmentDetailsScreen> {
   }
 
   Future<void> _cancel() async {
+    final formKey = GlobalKey<FormState>();
     final reasonController = TextEditingController();
     final reason = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text("Otkaži termin"),
-        content: TextField(
-          controller: reasonController,
-          decoration: const InputDecoration(labelText: "Razlog"),
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            controller: reasonController,
+            decoration: const InputDecoration(labelText: "Razlog"),
+            autofocus: true,
+            validator: (v) =>
+                (v == null || v.trim().isEmpty) ? "Razlog je obavezan" : null,
+          ),
         ),
         actions: [
           TextButton(
@@ -188,7 +224,11 @@ class _AppointmentDetailsScreenState extends State<AppointmentDetailsScreen> {
             child: const Text("Odustani"),
           ),
           ElevatedButton(
-            onPressed: () => Navigator.pop(context, reasonController.text),
+            onPressed: () {
+              if (formKey.currentState?.validate() ?? false) {
+                Navigator.pop(context, reasonController.text.trim());
+              }
+            },
             child: const Text("Otkaži termin"),
           ),
         ],

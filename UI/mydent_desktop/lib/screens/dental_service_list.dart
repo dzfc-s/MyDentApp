@@ -6,6 +6,8 @@ import '../models/dental_service.dart';
 import '../models/search_result.dart';
 import '../providers/dental_service_provider.dart';
 import '../utils/utils_widgets.dart';
+import '../widgets/asset_thumbnail.dart';
+import '../widgets/stat_card.dart';
 import 'dental_service_details_screen.dart';
 
 class DentalServiceList extends StatefulWidget {
@@ -50,6 +52,10 @@ class _DentalServiceListState extends State<DentalServiceList> {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
+            if (!isLoading) ...[
+              _buildStats(),
+              const SizedBox(height: 16),
+            ],
             _buildSearch(),
             isLoading
                 ? const Expanded(
@@ -58,6 +64,34 @@ class _DentalServiceListState extends State<DentalServiceList> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildStats() {
+    final services = result?.items ?? [];
+    final active = services.where((s) => s.isActive == true).length;
+    return Row(
+      children: [
+        StatCard(
+          icon: Icons.medical_information_outlined,
+          label: "Ukupno usluga",
+          value: services.length.toString(),
+        ),
+        const SizedBox(width: 16),
+        StatCard(
+          icon: Icons.check_circle_outline,
+          label: "Aktivne",
+          value: active.toString(),
+          color: Theme.of(context).colorScheme.tertiary,
+        ),
+        const SizedBox(width: 16),
+        StatCard(
+          icon: Icons.pause_circle_outlined,
+          label: "Neaktivne",
+          value: (services.length - active).toString(),
+          color: Theme.of(context).colorScheme.error,
+        ),
+      ],
     );
   }
 
@@ -101,6 +135,7 @@ class _DentalServiceListState extends State<DentalServiceList> {
         child: SingleChildScrollView(
           child: DataTable(
             columns: const [
+              DataColumn(label: Text("")),
               DataColumn(label: Text("Naziv")),
               DataColumn(label: Text("Kategorija")),
               DataColumn(label: Text("Cijena")),
@@ -121,6 +156,7 @@ class _DentalServiceListState extends State<DentalServiceList> {
                           if (refresh == "reload") initTable();
                         },
                         cells: [
+                          DataCell(AssetThumbnail(assetId: e.imageAssetId)),
                           DataCell(Text(e.name ?? '')),
                           DataCell(Text(e.serviceCategoryName ?? '')),
                           DataCell(Text(

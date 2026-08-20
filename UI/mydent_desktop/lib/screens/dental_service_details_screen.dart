@@ -155,15 +155,32 @@ class _DentalServiceDetailsScreenState
             ],
           ),
           const SizedBox(height: 16.0),
-          FormBuilderDropdown(
-            name: 'serviceCategoryId',
-            decoration: const InputDecoration(labelText: "Kategorija usluge"),
-            validator: (v) => v == null ? mField : null,
-            items: _categoriesResult?.items
-                    ?.map((c) => DropdownMenuItem(
-                        value: c.id, child: Text(c.name ?? '')))
-                    .toList() ??
-                [],
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: FormBuilderDropdown(
+                  name: 'serviceCategoryId',
+                  decoration:
+                      const InputDecoration(labelText: "Kategorija usluge"),
+                  validator: (v) => v == null ? mField : null,
+                  items: _categoriesResult?.items
+                          ?.map((c) => DropdownMenuItem(
+                              value: c.id, child: Text(c.name ?? '')))
+                          .toList() ??
+                      [],
+                ),
+              ),
+              const SizedBox(width: 8.0),
+              Padding(
+                padding: const EdgeInsets.only(top: 4.0),
+                child: IconButton.filledTonal(
+                  tooltip: "Nova kategorija",
+                  icon: const Icon(Icons.add),
+                  onPressed: _addCategory,
+                ),
+              ),
+            ],
           ),
           if (widget.service != null) ...[
             const SizedBox(height: 8.0),
@@ -172,6 +189,53 @@ class _DentalServiceDetailsScreenState
         ],
       ),
     );
+  }
+
+  Future<void> _addCategory() async {
+    final formKey = GlobalKey<FormState>();
+    final nameController = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Nova kategorija usluge"),
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            controller: nameController,
+            decoration: const InputDecoration(labelText: "Naziv"),
+            autofocus: true,
+            validator: (v) => (v == null || v.trim().isEmpty) ? mField : null,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Odustani"),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (formKey.currentState?.validate() ?? false) {
+                Navigator.pop(context, nameController.text.trim());
+              }
+            },
+            child: const Text("Dodaj"),
+          ),
+        ],
+      ),
+    );
+    if (name == null) return;
+
+    try {
+      final created = await _categoryProvider.insert({'name': name});
+      final categories = await _categoryProvider.get(filter: {});
+      if (!mounted) return;
+      setState(() => _categoriesResult = categories);
+      _formKey.currentState?.fields['serviceCategoryId']
+          ?.didChange(created.id);
+    } catch (e) {
+      if (!mounted) return;
+      alertBox(context, "Greška", "Greška prilikom dodavanja kategorije: $e");
+    }
   }
 
   Widget _buildActions() {

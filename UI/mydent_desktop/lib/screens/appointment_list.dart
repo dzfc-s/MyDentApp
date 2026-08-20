@@ -8,6 +8,7 @@ import '../models/search_result.dart';
 import '../providers/appointment_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/utils_widgets.dart';
+import '../widgets/stat_card.dart';
 
 class AppointmentList extends StatefulWidget {
   const AppointmentList({super.key});
@@ -59,6 +60,10 @@ class _AppointmentListState extends State<AppointmentList> {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
+            if (!isLoading) ...[
+              _buildStats(),
+              const SizedBox(height: 8),
+            ],
             _buildFilter(),
             isLoading
                 ? const Expanded(
@@ -67,6 +72,48 @@ class _AppointmentListState extends State<AppointmentList> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildStats() {
+    final appointments = result?.items ?? [];
+    final pending = appointments
+        .where((a) => AppointmentStatusX.fromInt(a.status) == AppointmentStatus.pending)
+        .length;
+    final confirmed = appointments
+        .where((a) => AppointmentStatusX.fromInt(a.status) == AppointmentStatus.confirmed)
+        .length;
+    final completed = appointments
+        .where((a) => AppointmentStatusX.fromInt(a.status) == AppointmentStatus.completed)
+        .length;
+    return Row(
+      children: [
+        StatCard(
+          icon: Icons.event_outlined,
+          label: "Ukupno termina",
+          value: appointments.length.toString(),
+        ),
+        const SizedBox(width: 16),
+        StatCard(
+          icon: Icons.hourglass_empty_outlined,
+          label: "Na čekanju",
+          value: pending.toString(),
+          color: Theme.of(context).colorScheme.secondary,
+        ),
+        const SizedBox(width: 16),
+        StatCard(
+          icon: Icons.event_available_outlined,
+          label: "Potvrđeni",
+          value: confirmed.toString(),
+          color: Theme.of(context).colorScheme.tertiary,
+        ),
+        const SizedBox(width: 16),
+        StatCard(
+          icon: Icons.task_alt_outlined,
+          label: "Završeni",
+          value: completed.toString(),
+        ),
+      ],
     );
   }
 
@@ -213,14 +260,21 @@ class _AppointmentListState extends State<AppointmentList> {
   }
 
   Future _cancel(Appointment e) async {
+    final formKey = GlobalKey<FormState>();
     final reasonController = TextEditingController();
     final reason = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text("Otkaži termin"),
-        content: TextField(
-          controller: reasonController,
-          decoration: const InputDecoration(labelText: "Razlog otkazivanja"),
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            controller: reasonController,
+            decoration: const InputDecoration(labelText: "Razlog otkazivanja"),
+            autofocus: true,
+            validator: (v) =>
+                (v == null || v.trim().isEmpty) ? "Razlog je obavezan" : null,
+          ),
         ),
         actions: [
           TextButton(
@@ -228,7 +282,11 @@ class _AppointmentListState extends State<AppointmentList> {
             child: const Text("Odustani"),
           ),
           ElevatedButton(
-            onPressed: () => Navigator.pop(context, reasonController.text),
+            onPressed: () {
+              if (formKey.currentState?.validate() ?? false) {
+                Navigator.pop(context, reasonController.text.trim());
+              }
+            },
             child: const Text("Otkaži termin"),
           ),
         ],

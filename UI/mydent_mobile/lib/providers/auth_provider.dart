@@ -50,6 +50,17 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future register(Map<String, dynamic> data) async {
+    var uri = Uri.parse("${_baseUrl}Access/Register");
+    var headers = createHeaders();
+    var body = jsonEncode(data);
+
+    http.Response response =
+        await http.post(uri, headers: headers, body: body);
+
+    validateResponse(response);
+  }
+
   Future logoutRemote() async {
     if (_accesstoken == null) return;
     var uri = Uri.parse("${_baseUrl}Access/Logout");

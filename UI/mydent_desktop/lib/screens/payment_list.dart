@@ -8,6 +8,7 @@ import '../models/search_result.dart';
 import '../providers/payment_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/utils_widgets.dart';
+import '../widgets/stat_card.dart';
 
 class PaymentList extends StatefulWidget {
   const PaymentList({super.key});
@@ -49,8 +50,47 @@ class _PaymentListState extends State<PaymentList> {
         padding: const EdgeInsets.all(16.0),
         child: isLoading
             ? const Center(child: CircularProgressIndicator())
-            : _buildTable(),
+            : Column(
+                children: [
+                  _buildStats(),
+                  const SizedBox(height: 16),
+                  _buildTable(),
+                ],
+              ),
       ),
+    );
+  }
+
+  Widget _buildStats() {
+    final payments = result?.items ?? [];
+    final paid = payments
+        .where((p) => PaymentStatusX.fromInt(p.status) == PaymentStatus.paid);
+    final refunded = payments.where(
+        (p) => PaymentStatusX.fromInt(p.status) == PaymentStatus.refunded);
+    final totalPaid = paid.fold<double>(0, (sum, p) => sum + (p.amount ?? 0));
+
+    return Row(
+      children: [
+        StatCard(
+          icon: Icons.payments_outlined,
+          label: "Naplaćeno",
+          value: "${totalPaid.toStringAsFixed(2)} KM",
+        ),
+        const SizedBox(width: 16),
+        StatCard(
+          icon: Icons.check_circle_outline,
+          label: "Plaćeni",
+          value: paid.length.toString(),
+          color: Theme.of(context).colorScheme.tertiary,
+        ),
+        const SizedBox(width: 16),
+        StatCard(
+          icon: Icons.undo_outlined,
+          label: "Refundirani",
+          value: refunded.length.toString(),
+          color: Theme.of(context).colorScheme.error,
+        ),
+      ],
     );
   }
 

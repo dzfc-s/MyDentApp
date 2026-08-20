@@ -9,6 +9,7 @@ import '../providers/auth_provider.dart';
 import '../providers/user_provider.dart';
 import '../utils/utils_widgets.dart';
 import 'change_password_screen.dart';
+import 'health_record_screen.dart';
 import 'notification_settings_screen.dart';
 import 'profile_settings_screen.dart';
 
@@ -103,6 +104,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         context,
                         MaterialPageRoute(
                           builder: (_) => ProfileSettingsScreen(user: user!),
+                        ),
+                      );
+                      if (refresh == 'reload') _load();
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.medical_information_outlined),
+                    title: const Text("Zdravstveni karton"),
+                    onTap: () async {
+                      final refresh = await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => HealthRecordScreen(user: user!),
                         ),
                       );
                       if (refresh == 'reload') _load();
