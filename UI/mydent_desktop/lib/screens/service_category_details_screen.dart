@@ -47,7 +47,7 @@ class _ServiceCategoryDetailsScreenState
       title: widget.category != null
           ? 'Uredi kategoriju'
           : 'Nova kategorija usluga',
-      currentSection: AppSection.serviceCategories,
+      currentSection: AppSection.dentalServices,
       child: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(32.0),

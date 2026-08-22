@@ -57,6 +57,26 @@ class AppointmentProvider extends BaseProvider<Appointment> {
     return fromJson(jsonDecode(response.body));
   }
 
+  Future<Appointment> reschedule(
+    int id, {
+    required int doctorId,
+    required int dentalServiceId,
+    required DateTime scheduledAt,
+  }) async {
+    final uri = Uri.parse("$baseUrl$endpoint/$id/reschedule");
+    final response = await http.post(
+      uri,
+      headers: createHeaders(),
+      body: jsonEncode({
+        "doctorId": doctorId,
+        "dentalServiceId": dentalServiceId,
+        "scheduledAt": scheduledAt.toIso8601String(),
+      }),
+    );
+    validateResponse(response);
+    return fromJson(jsonDecode(response.body));
+  }
+
   Future<Appointment> complete(int id) async {
     final uri = Uri.parse("$baseUrl$endpoint/$id/complete");
     final response = await http.post(uri, headers: createHeaders());

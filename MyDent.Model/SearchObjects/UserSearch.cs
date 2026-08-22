@@ -21,5 +21,10 @@ namespace MyDent.Model.SearchObjects
         /// Filter by active/inactive users.
         /// </summary>
         public bool? IsActive { get; set; }
+
+        /// <summary>
+        /// Filter by role name (e.g. "Admin", "Patient").
+        /// </summary>
+        public string? Role { get; set; }
     }
 }

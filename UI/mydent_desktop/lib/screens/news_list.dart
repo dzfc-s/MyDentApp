@@ -30,7 +30,7 @@ class _NewsListState extends State<NewsList> {
 
   Future<void> initTable() async {
     try {
-      var data = await _provider.get(filter: {});
+      var data = await _provider.get(filter: {"pageSize": 200});
       setState(() {
         result = data;
         isLoading = false;
@@ -80,6 +80,7 @@ class _NewsListState extends State<NewsList> {
         width: double.infinity,
         child: SingleChildScrollView(
           child: DataTable(
+            showCheckboxColumn: false,
             columns: const [
               DataColumn(label: Text("")),
               DataColumn(label: Text("Naslov")),

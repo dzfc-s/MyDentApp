@@ -31,7 +31,7 @@ class _PaymentListState extends State<PaymentList> {
 
   Future<void> initTable() async {
     try {
-      var data = await _provider.get(filter: {});
+      var data = await _provider.get(filter: {"pageSize": 200});
       setState(() {
         result = data;
         isLoading = false;
@@ -100,6 +100,7 @@ class _PaymentListState extends State<PaymentList> {
         width: double.infinity,
         child: SingleChildScrollView(
           child: DataTable(
+            showCheckboxColumn: false,
             columns: const [
               DataColumn(label: Text("Pacijent")),
               DataColumn(label: Text("Doktor")),

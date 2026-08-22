@@ -15,7 +15,11 @@ import '../widgets/image_asset_picker.dart';
 class DentalServiceDetailsScreen extends StatefulWidget {
   final DentalService? service;
 
-  const DentalServiceDetailsScreen({super.key, this.service});
+  /// Pre-selects the category when opened via "Nova usluga" from within a
+  /// specific category's section on the merged Usluge screen.
+  final int? initialCategoryId;
+
+  const DentalServiceDetailsScreen({super.key, this.service, this.initialCategoryId});
 
   @override
   State<DentalServiceDetailsScreen> createState() =>
@@ -44,7 +48,8 @@ class _DentalServiceDetailsScreenState
       'description': widget.service?.description ?? '',
       'price': widget.service?.price?.toString() ?? '',
       'durationMinutes': widget.service?.durationMinutes?.toString() ?? '',
-      'serviceCategoryId': widget.service?.serviceCategoryId,
+      'serviceCategoryId':
+          widget.service?.serviceCategoryId ?? widget.initialCategoryId,
       'isActive': widget.service?.isActive ?? true,
     };
 
@@ -56,7 +61,24 @@ class _DentalServiceDetailsScreenState
 
   Future _initForm() async {
     try {
-      var categories = await _categoryProvider.get(filter: {});
+      var categories = await _categoryProvider.get(filter: {"isActive": true});
+
+      // Defensive: if this service's own category isn't in the active list
+      // (e.g. older data from before inactive-category cascading existed),
+      // splice it back in so the dropdown's initialValue still has a
+      // matching item instead of throwing.
+      final currentCategoryId = widget.service?.serviceCategoryId;
+      if (currentCategoryId != null &&
+          (categories.items?.every((c) => c.id != currentCategoryId) ?? true)) {
+        try {
+          final current = await _categoryProvider.getById(currentCategoryId);
+          categories.items = [...?categories.items, current];
+        } catch (_) {
+          // If it can't even be fetched, leave the dropdown as-is — saving
+          // will just require picking a (now current) category.
+        }
+      }
+
       if (!mounted) return;
       setState(() {
         _categoriesResult = categories;

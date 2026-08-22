@@ -1,118 +1,56 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../layouts/master_screen.dart';
 import '../models/doctor.dart';
 import '../models/doctor_absence.dart';
-import '../models/search_result.dart';
 import '../providers/doctor_absence_provider.dart';
-import '../providers/doctor_provider.dart';
 import '../utils/utils_widgets.dart';
 
-class DoctorAbsenceList extends StatefulWidget {
-  const DoctorAbsenceList({super.key});
-
-  @override
-  State<DoctorAbsenceList> createState() => _DoctorAbsenceListState();
+/// Opened from a doctor's own card/details instead of navigating to the
+/// clinic-wide "Odsustva" section — scoped to just this doctor, so managing
+/// one doctor's absences doesn't require finding them in a flat all-doctors
+/// table.
+Future<void> showDoctorAbsencesDialog(BuildContext context, Doctor doctor) {
+  return showDialog(
+    context: context,
+    builder: (context) => _DoctorAbsencesDialog(doctor: doctor),
+  );
 }
 
-class _DoctorAbsenceListState extends State<DoctorAbsenceList> {
-  late DoctorAbsenceProvider _provider;
-  late DoctorProvider _doctorProvider;
+class _DoctorAbsencesDialog extends StatefulWidget {
+  final Doctor doctor;
+  const _DoctorAbsencesDialog({required this.doctor});
 
-  SearchResult<DoctorAbsence>? result;
-  SearchResult<Doctor>? doctors;
-  bool isLoading = true;
+  @override
+  State<_DoctorAbsencesDialog> createState() => _DoctorAbsencesDialogState();
+}
+
+class _DoctorAbsencesDialogState extends State<_DoctorAbsencesDialog> {
+  late DoctorAbsenceProvider _provider;
+  List<DoctorAbsence> _absences = [];
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     _provider = context.read<DoctorAbsenceProvider>();
-    _doctorProvider = context.read<DoctorProvider>();
     _load();
   }
 
   Future<void> _load() async {
     try {
-      final results = await Future.wait<dynamic>([
-        _provider.get(filter: {"pageSize": 200}),
-        _doctorProvider.get(filter: {"pageSize": 200}),
-      ]);
+      final result = await _provider
+          .get(filter: {"doctorId": widget.doctor.id, "pageSize": 200});
+      if (!mounted) return;
       setState(() {
-        result = results[0] as SearchResult<DoctorAbsence>;
-        doctors = results[1] as SearchResult<Doctor>;
-        isLoading = false;
+        _absences = result.items ?? [];
+        _isLoading = false;
       });
     } on Exception catch (e) {
-      alertBox(context, 'Greška', e.toString());
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      alertBox(context, "Greška", e.toString());
     }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return MasterScreen(
-      title: "Odsustva doktora",
-      currentSection: AppSection.doctorAbsences,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            Align(
-              alignment: Alignment.centerRight,
-              child: ElevatedButton(
-                onPressed: isLoading ? null : () => _openDialog(null),
-                child: const Text("Novo odsustvo"),
-              ),
-            ),
-            const SizedBox(height: 8),
-            isLoading
-                ? const Expanded(
-                    child: Center(child: CircularProgressIndicator()))
-                : _buildTable(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Expanded _buildTable() {
-    return Expanded(
-      child: SizedBox(
-        width: double.infinity,
-        child: SingleChildScrollView(
-          child: DataTable(
-            showCheckboxColumn: false,
-            columns: const [
-              DataColumn(label: Text("Doktor")),
-              DataColumn(label: Text("Od")),
-              DataColumn(label: Text("Do")),
-              DataColumn(label: Text("Razlog")),
-              DataColumn(label: Text("Obriši")),
-            ],
-            rows: result?.items
-                    ?.map(
-                      (e) => DataRow(
-                        onSelectChanged: (v) => _openDialog(e),
-                        cells: [
-                          DataCell(Text(e.doctorName ?? '')),
-                          DataCell(Text(e.startDate ?? '')),
-                          DataCell(Text(e.endDate ?? '')),
-                          DataCell(Text(e.reason ?? '')),
-                          DataCell(
-                            IconButton(
-                              icon: const Icon(Icons.delete),
-                              onPressed: () => _confirmDelete(e),
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                    .toList() ??
-                List.empty(),
-          ),
-        ),
-      ),
-    );
   }
 
   DateTime? _parseDate(String? yyyyMmDd) =>
@@ -121,20 +59,75 @@ class _DoctorAbsenceListState extends State<DoctorAbsenceList> {
   String _formatDate(DateTime d) =>
       "${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}";
 
-  void _openDialog(DoctorAbsence? existing) {
+  @override
+  Widget build(BuildContext context) {
+    final name = "${widget.doctor.firstName ?? ''} ${widget.doctor.lastName ?? ''}".trim();
+    return AlertDialog(
+      title: Text("Odsustva — $name"),
+      content: SizedBox(
+        width: 420,
+        child: _isLoading
+            ? const SizedBox(
+                height: 100, child: Center(child: CircularProgressIndicator()))
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (_absences.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                      child: Text("Nema evidentiranih odsustava.",
+                          style: TextStyle(color: Colors.grey)),
+                    )
+                  else
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 260),
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: _absences.length,
+                        itemBuilder: (context, index) {
+                          final a = _absences[index];
+                          return ListTile(
+                            dense: true,
+                            title: Text("${a.startDate} – ${a.endDate}"),
+                            subtitle: Text(a.reason ?? ''),
+                            onTap: () => _openForm(existing: a),
+                            trailing: IconButton(
+                              tooltip: "Ukloni",
+                              icon: const Icon(Icons.delete_outline),
+                              onPressed: () => _confirmDelete(a),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  const SizedBox(height: 4),
+                  TextButton.icon(
+                    onPressed: () => _openForm(),
+                    icon: const Icon(Icons.add),
+                    label: const Text("Novo odsustvo"),
+                  ),
+                ],
+              ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text("Zatvori"),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _openForm({DoctorAbsence? existing}) async {
     final formKey = GlobalKey<FormState>();
-    int? doctorId = existing?.doctorId;
     DateTime start = _parseDate(existing?.startDate) ?? DateTime.now();
     DateTime end = _parseDate(existing?.endDate) ?? DateTime.now();
     final reasonController = TextEditingController(text: existing?.reason ?? '');
-    // Date pickers have no native Form validator, so their "required"
-    // state is tracked manually and only surfaced once Save is pressed —
-    // same inline-under-the-field treatment as the Form-backed fields below,
-    // never a separate popup error dialog.
     String? startError;
     String? endError;
 
-    showDialog(
+    final saved = await showDialog<bool>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
@@ -144,22 +137,6 @@ class _DoctorAbsenceListState extends State<DoctorAbsenceList> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (existing == null)
-                  DropdownButtonFormField<int>(
-                    initialValue: doctorId,
-                    decoration: const InputDecoration(labelText: "Doktor"),
-                    items: doctors?.items
-                            ?.map((d) => DropdownMenuItem(
-                                value: d.id,
-                                child: Text("${d.firstName} ${d.lastName}")))
-                            .toList() ??
-                        [],
-                    validator: (v) => v == null ? "Doktor je obavezan" : null,
-                    onChanged: (v) => setDialogState(() => doctorId = v),
-                  )
-                else
-                  Text("Doktor: ${existing.doctorName}"),
-                const SizedBox(height: 12),
                 ListTile(
                   title: const Text("Od"),
                   subtitle: startError != null
@@ -208,8 +185,9 @@ class _DoctorAbsenceListState extends State<DoctorAbsenceList> {
                 TextFormField(
                   controller: reasonController,
                   decoration: const InputDecoration(labelText: "Razlog"),
-                  validator: (v) =>
-                      (v == null || v.trim().isEmpty) ? "Razlog je obavezan" : null,
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? "Razlog je obavezan"
+                      : null,
                 ),
               ],
             ),
@@ -223,16 +201,15 @@ class _DoctorAbsenceListState extends State<DoctorAbsenceList> {
               onPressed: () async {
                 final formValid = formKey.currentState?.validate() ?? false;
                 setDialogState(() {
-                  endError = end.isBefore(start)
-                      ? "Datum do mora biti nakon datuma od"
-                      : null;
+                  endError =
+                      end.isBefore(start) ? "Datum do mora biti nakon datuma od" : null;
                 });
                 if (!formValid || endError != null) return;
 
                 try {
                   if (existing == null) {
                     await _provider.insert({
-                      "doctorId": doctorId,
+                      "doctorId": widget.doctor.id,
                       "startDate": _formatDate(start),
                       "endDate": _formatDate(end),
                       "reason": reasonController.text.trim(),
@@ -244,10 +221,10 @@ class _DoctorAbsenceListState extends State<DoctorAbsenceList> {
                       "reason": reasonController.text.trim(),
                     });
                   }
-                  if (!mounted) return;
-                  Navigator.pop(context);
-                  _load();
+                  if (!context.mounted) return;
+                  Navigator.pop(context, true);
                 } on Exception catch (e) {
+                  if (!context.mounted) return;
                   alertBox(context, "Greška", e.toString());
                 }
               },
@@ -257,9 +234,11 @@ class _DoctorAbsenceListState extends State<DoctorAbsenceList> {
         ),
       ),
     );
+
+    if (saved == true) _load();
   }
 
-  void _confirmDelete(DoctorAbsence e) {
+  void _confirmDelete(DoctorAbsence a) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -273,12 +252,13 @@ class _DoctorAbsenceListState extends State<DoctorAbsenceList> {
           ElevatedButton(
             onPressed: () async {
               try {
-                await _provider.remove(e.id!);
-                if (!mounted) return;
+                await _provider.remove(a.id!);
+                if (!context.mounted) return;
                 Navigator.pop(context);
                 _load();
               } on Exception catch (ex) {
-                alertBoxMoveBack(context, "Greška", ex.toString());
+                if (!context.mounted) return;
+                alertBox(context, "Greška", ex.toString());
               }
             },
             child: const Text("Da"),

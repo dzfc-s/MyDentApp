@@ -28,24 +28,35 @@ namespace MyDent.Services
         }
 
 
-        protected override IEnumerable<User> ApplyFilters(IEnumerable<User> query, UserSearch? search)
+        protected override Task<IQueryable<User>> IncludeRelatedEntitiesAsync(UserSearch? search, IQueryable<User> query = null!)
+        {
+            query = query.Include(u => u.UserRoles).ThenInclude(ur => ur.Role);
+            return base.IncludeRelatedEntitiesAsync(search, query);
+        }
+
+        protected override IQueryable<User> ApplyFilters(IQueryable<User> query, UserSearch? search)
         {
             if (search != null)
             {
+                if (!string.IsNullOrWhiteSpace(search.Role))
+                {
+                    query = query.Where(u => u.UserRoles.Any(ur => ur.Role.Name == search.Role));
+                }
+
                 if (!string.IsNullOrWhiteSpace(search.Email))
                 {
-                    query = query.Where(u => u.Email.Contains(search.Email, StringComparison.OrdinalIgnoreCase));
+                    query = query.Where(u => EF.Functions.Like(u.Email, $"%{search.Email}%"));
                 }
 
                 if (!string.IsNullOrWhiteSpace(search.Username))
                 {
-                    query = query.Where(u => u.Username.Contains(search.Username, StringComparison.OrdinalIgnoreCase));
+                    query = query.Where(u => EF.Functions.Like(u.Username, $"%{search.Username}%"));
                 }
 
                 if (!string.IsNullOrWhiteSpace(search.Name))
                 {
-                    query = query.Where(u => u.FirstName.Contains(search.Name, StringComparison.OrdinalIgnoreCase)
-                                          || u.LastName.Contains(search.Name, StringComparison.OrdinalIgnoreCase));
+                    query = query.Where(u => EF.Functions.Like(u.FirstName, $"%{search.Name}%")
+                                          || EF.Functions.Like(u.LastName, $"%{search.Name}%"));
                 }
 
                 if (search.IsActive.HasValue)

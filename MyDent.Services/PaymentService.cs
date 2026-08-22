@@ -39,7 +39,7 @@ namespace MyDent.Services
             return base.IncludeRelatedEntitiesAsync(search, query);
         }
 
-        protected override IEnumerable<Payment> ApplyFilters(IEnumerable<Payment> query, PaymentSearch? search)
+        protected override IQueryable<Payment> ApplyFilters(IQueryable<Payment> query, PaymentSearch? search)
         {
             // Financial data is private, same principle as Notification: a non-Admin only ever
             // sees their own payments, regardless of what's requested.

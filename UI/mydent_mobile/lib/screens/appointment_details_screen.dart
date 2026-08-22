@@ -11,6 +11,7 @@ import '../providers/doctor_provider.dart';
 import '../providers/payment_provider.dart';
 import '../providers/review_provider.dart';
 import '../theme/app_theme.dart';
+import '../utils/booking_helpers.dart';
 import '../utils/utils_widgets.dart';
 import '../widgets/asset_avatar.dart';
 import 'add_review_screen.dart';
@@ -127,12 +128,47 @@ class _AppointmentDetailsScreenState extends State<AppointmentDetailsScreen> {
                       ],
                     ),
                   ),
-                  if (a.cancellationReason != null)
-                    _row("Razlog otkazivanja", a.cancellationReason!),
                 ],
               ),
             ),
           ),
+          if (status == AppointmentStatus.cancelled &&
+              (a.cancellationReason?.trim().isNotEmpty ?? false)) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.dangerContainer,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.danger.withValues(alpha: 0.35)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.info_outline, color: AppColors.danger, size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          "Razlog otkazivanja: ${a.cancellationReason}",
+                          style: const TextStyle(color: AppColors.danger, height: 1.4),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    "Pratite novosti u aplikaciji — obavijestit ćemo Vas kada doktor "
+                    "bude ponovo dostupan za rezervacije.",
+                    style: TextStyle(color: AppColors.danger, fontSize: 12.5, height: 1.4),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           if (status == AppointmentStatus.pending ||
               status == AppointmentStatus.confirmed) ...[
@@ -142,6 +178,17 @@ class _AppointmentDetailsScreenState extends State<AppointmentDetailsScreen> {
                 onPressed: _cancel,
                 style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
                 child: const Text("Otkaži termin"),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+          if (status == AppointmentStatus.cancelled) ...[
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () => pickServiceAndBook(context),
+                icon: const Icon(Icons.event_repeat_outlined),
+                label: const Text("Zakaži ponovo"),
               ),
             ),
             const SizedBox(height: 8),

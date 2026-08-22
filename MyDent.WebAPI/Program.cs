@@ -69,7 +69,8 @@ builder.Services.AddMapster();
 // configure a few mappings explicitly if needed (optional)
 // Mapster will automatically map same-named properties, but configuration
 // ensures any custom rules or future needs can be added here.
-TypeAdapterConfig<User, UserResponse>.NewConfig().IgnoreNullValues(true);
+TypeAdapterConfig<User, UserResponse>.NewConfig().IgnoreNullValues(true)
+    .Map(dest => dest.Role, src => src.UserRoles != null && src.UserRoles.Any() ? src.UserRoles.First().Role.Name : string.Empty);
 TypeAdapterConfig<UserUpdateRequest, User>.NewConfig().IgnoreNullValues(true);
 // ReviewUpdateRequest fields are all nullable (Rating/Comment for the patient, IsApproved for
 // Admin — each side only sends what it's allowed to touch). Without this, Mapster maps an
@@ -237,7 +238,35 @@ var app = builder.Build();
 // update` by hand from outside the container.
 using (var scope = app.Services.CreateScope())
 {
-    scope.ServiceProvider.GetRequiredService<MyDentDbContext>().Database.Migrate();
+    var dbContext = scope.ServiceProvider.GetRequiredService<MyDentDbContext>();
+    dbContext.Database.Migrate();
+
+    // EF Core compiles each *distinct query shape* the first time it runs, not just the model
+    // once overall — a plain "Take(1)" warms the model but not the specific Include/join shapes
+    // Login and the dashboard's two big fetches actually use, so those still paid this cost on
+    // whoever hit them first (almost always the very next real Login, then whoever opened
+    // Početna). Warming those exact shapes here instead. Failures here must never block startup —
+    // worst case, the first real request just pays the cost it would have paid anyway.
+    try
+    {
+        // Same shape as UserService.GetByUsernameAsync (the Login query).
+        await dbContext.Users.AsNoTracking()
+            .Include(u => u.UserRoles).ThenInclude(ur => ur.Role)
+            .FirstOrDefaultAsync(u => u.Username == "__warmup__");
+
+        // Same shape as the desktop dashboard's two "pageSize:2000" fetches.
+        await dbContext.Appointments.AsNoTracking()
+            .Include(a => a.Patient).Include(a => a.Doctor).Include(a => a.DentalService)
+            .Take(1).ToListAsync();
+        await dbContext.Payments.AsNoTracking()
+            .Include(p => p.Appointment).ThenInclude(a => a.Patient)
+            .Include(p => p.Appointment).ThenInclude(a => a.Doctor)
+            .Take(1).ToListAsync();
+    }
+    catch
+    {
+        // Ignored — see comment above.
+    }
 }
 
 // Configure the HTTP request pipeline.

@@ -17,8 +17,9 @@ import 'providers/recommendation_provider.dart';
 import 'providers/review_provider.dart';
 import 'providers/service_category_provider.dart';
 import 'providers/user_provider.dart';
-import 'screens/appointment_list.dart';
+import 'screens/dashboard_screen.dart';
 import 'theme/app_theme.dart';
+import 'widgets/tooth_icon.dart';
 void main() {
   runApp(
     MultiProvider(
@@ -82,7 +83,7 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
       if (!mounted) return;
-      Navigator.push(context, MaterialPageRoute(builder: (context) => const AppointmentList()));
+      Navigator.push(context, MaterialPageRoute(builder: (context) => const DashboardScreen()));
     } on Exception catch (e) {
       alertBox(context, "Error", e.toString());
     } finally {
@@ -94,7 +95,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text("Login"),
+        title: Text("Admin panel"),
       ),
       body: Center(
         child: Container(
@@ -106,16 +107,21 @@ class _LoginScreenState extends State<LoginScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // TODO: replace with the real MyDent logo asset once available.
                 Container(
                   width: 100,
                   height: 100,
                   decoration: BoxDecoration(
-                    color: AppColors.primaryDark,
+                    color: Colors.white,
                     shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primary.withValues(alpha: 0.25),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
                   ),
-                  child: const Icon(Icons.medical_services_outlined,
-                      color: Colors.white, size: 48),
+                  child: const Center(child: ToothLogo(width: 58)),
                 ),
                 const SizedBox(height: 8),
                 Text("MyDent",

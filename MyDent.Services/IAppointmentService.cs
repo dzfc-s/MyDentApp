@@ -16,6 +16,7 @@ namespace MyDent.Services
         Task<AppointmentResponse> ConfirmAsync(int id);
         Task<AppointmentResponse> CancelAsync(int id, AppointmentCancelRequest request);
         Task<AppointmentResponse> CompleteAsync(int id);
+        Task<AppointmentResponse> RescheduleAsync(int id, AppointmentRescheduleRequest request);
         Task<List<AppointmentStatusHistoryResponse>> GetHistoryAsync(int id);
     }
 }

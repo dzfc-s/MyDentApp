@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models/appointment.dart';
 import '../models/dental_service.dart';
+import '../models/enums.dart';
 import '../models/news.dart';
 import '../models/recommendation.dart';
 import '../models/search_result.dart';
 import '../models/service_category.dart';
+import '../providers/appointment_provider.dart';
 import '../providers/dental_service_provider.dart';
 import '../providers/news_provider.dart';
 import '../providers/recommendation_provider.dart';
@@ -13,11 +16,33 @@ import '../providers/service_category_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/utils_widgets.dart';
 import '../widgets/news_detail_dialog.dart';
+import 'appointment_details_screen.dart';
 import 'dental_service_details_screen.dart';
+import 'service_browse_screen.dart';
 import '../providers/auth_provider.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  /// Switches the shared bottom-tab shell (`ContainerScreen`) to the
+  /// "Termini" tab — home has no navigator/tab-index of its own.
+  final VoidCallback onGoToAppointments;
+
+  /// Opens the same "pick a service to book" sheet as the shell's FAB
+  /// (kept in `ContainerScreen` so there's one implementation, not two).
+  final VoidCallback onBookAppointment;
+
+  /// Bumped by `ContainerScreen` every time the Home tab is switched to.
+  /// `IndexedStack` keeps this screen's State alive across tab switches, so
+  /// without this, `_load()` only ever ran once in `initState` — a service
+  /// activated (or any other data changed) elsewhere never showed up here
+  /// until the app was restarted or the patient pulled to refresh.
+  final int refreshTick;
+
+  const HomeScreen({
+    super.key,
+    required this.onGoToAppointments,
+    required this.onBookAppointment,
+    this.refreshTick = 0,
+  });
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -28,10 +53,12 @@ class _HomeScreenState extends State<HomeScreen> {
   late ServiceCategoryProvider _categoryProvider;
   late RecommendationProvider _recommendationProvider;
   late NewsProvider _newsProvider;
+  late AppointmentProvider _appointmentProvider;
 
   SearchResult<DentalService>? services;
   SearchResult<ServiceCategory>? categories;
   List<Recommendation> recommendations = [];
+  Appointment? _nextAppointment;
   int? _selectedCategoryId;
   bool isLoading = true;
 
@@ -50,6 +77,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _categoryProvider = context.read<ServiceCategoryProvider>();
     _recommendationProvider = context.read<RecommendationProvider>();
     _newsProvider = context.read<NewsProvider>();
+    _appointmentProvider = context.read<AppointmentProvider>();
 
     _scrollController.addListener(() {
       if (_scrollController.position.pixels >=
@@ -69,6 +97,12 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
+  @override
+  void didUpdateWidget(covariant HomeScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.refreshTick != oldWidget.refreshTick) _load();
+  }
+
   Future<void> _load() async {
     try {
       final s = await _serviceProvider.get(filter: {
@@ -85,6 +119,24 @@ class _HomeScreenState extends State<HomeScreen> {
         // Recommendations are a nice-to-have — never block browsing on their failure.
       }
 
+      Appointment? next;
+      try {
+        // AppointmentService forces non-Admin callers to their own appointments regardless
+        // of filter, so this is already scoped to the current patient.
+        final appts = await _appointmentProvider.get(filter: {"pageSize": 200});
+        final now = DateTime.now();
+        final upcoming = (appts.items ?? [])
+            .where((a) =>
+                a.scheduledAt != null &&
+                a.scheduledAt!.isAfter(now) &&
+                a.status != AppointmentStatus.cancelled.index)
+            .toList()
+          ..sort((a, b) => a.scheduledAt!.compareTo(b.scheduledAt!));
+        next = upcoming.isNotEmpty ? upcoming.first : null;
+      } catch (_) {
+        // Same reasoning as recommendations — the hero card is a bonus, not a blocker.
+      }
+
       _newsPage = 1;
       final n = await _newsProvider
           .get(filter: {"isPublished": true, "page": _newsPage});
@@ -94,6 +146,7 @@ class _HomeScreenState extends State<HomeScreen> {
         services = s;
         categories = c;
         recommendations = recs;
+        _nextAppointment = next;
         _newsItems
           ..clear()
           ..addAll(n.items ?? []);
@@ -137,6 +190,14 @@ class _HomeScreenState extends State<HomeScreen> {
               padding: const EdgeInsets.all(16),
               children: [
                 _buildHero(),
+                const SizedBox(height: 16),
+                // Figma leads with the next-appointment card, quick actions come
+                // after it — the reverse of how these were first ordered here.
+                if (_nextAppointment != null) ...[
+                  _buildNextAppointmentCard(_nextAppointment!),
+                  const SizedBox(height: 16),
+                ],
+                _buildQuickActions(),
                 const SizedBox(height: 20),
                 if (recommendations.isNotEmpty) ...[
                   Text("Preporučeno za vas",
@@ -147,9 +208,22 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
                 _buildCategoryChips(),
                 const SizedBox(height: 16),
-                Text("Usluge", style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 8),
-                ...?services?.items?.map(_buildServiceTile),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text("Usluge", style: Theme.of(context).textTheme.titleMedium),
+                    TextButton(
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const ServiceBrowseScreen()),
+                      ),
+                      child: const Text("Prikaži sve"),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                ...?services?.items?.take(4).map(_buildServiceTile),
                 const SizedBox(height: 24),
                 Text("Novosti klinike",
                     style: Theme.of(context).textTheme.titleMedium),
@@ -172,8 +246,29 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  static const _weekdays = [
+    'Ponedjeljak', 'Utorak', 'Srijeda', 'Četvrtak', 'Petak', 'Subota', 'Nedjelja',
+  ];
+  static const _months = [
+    'januara', 'februara', 'marta', 'aprila', 'maja', 'juna',
+    'jula', 'avgusta', 'septembra', 'oktobra', 'novembra', 'decembra',
+  ];
+
+  /// "Dobro jutro/dan/veče" — Figma's greeting varies by time of day, unlike
+  /// the flat "Zdravo" this previously always showed.
+  String _timeOfDayGreeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'Dobro jutro';
+    if (hour < 18) return 'Dobar dan';
+    return 'Dobro veče';
+  }
+
   Widget _buildHero() {
     final firstName = AuthProvider.accessTokenDecoded?['FirstName'] as String?;
+    final now = DateTime.now();
+    final dateLine =
+        '${_weekdays[now.weekday - 1]}, ${now.day}. ${_months[now.month - 1]} ${now.year}.';
+
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
       decoration: BoxDecoration(
@@ -188,9 +283,14 @@ class _HomeScreenState extends State<HomeScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
+            dateLine,
+            style: const TextStyle(color: Colors.white60, fontSize: 12),
+          ),
+          const SizedBox(height: 6),
+          Text(
             firstName != null && firstName.isNotEmpty
-                ? "Zdravo, $firstName"
-                : "Dobrodošli",
+                ? "${_timeOfDayGreeting()}, $firstName 👋"
+                : "Dobrodošli 👋",
             style: const TextStyle(
               color: Colors.white,
               fontSize: 22,
@@ -220,6 +320,157 @@ class _HomeScreenState extends State<HomeScreen> {
             onSubmitted: (_) => _load(),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildQuickActions() {
+    return Row(
+      children: [
+        Expanded(
+          child: _quickActionButton(
+            icon: Icons.add_circle_outline,
+            label: 'Zakaži termin',
+            onTap: widget.onBookAppointment,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _quickActionButton(
+            icon: Icons.event_note_outlined,
+            label: 'Moji termini',
+            onTap: widget.onGoToAppointments,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _quickActionButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: AppColors.primary),
+            const SizedBox(height: 6),
+            Text(label,
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// "Next appointment" hero — the piece the Figma reference leads the home
+  /// screen with; this app previously had no equivalent at all (a patient
+  /// had to open the Termini tab to see what's coming up).
+  Widget _buildNextAppointmentCard(Appointment a) {
+    final dt = a.scheduledAt!.toLocal();
+    final now = DateTime.now();
+    final isToday = dt.year == now.year && dt.month == now.month && dt.day == now.day;
+    final tomorrow = now.add(const Duration(days: 1));
+    final isTomorrow =
+        dt.year == tomorrow.year && dt.month == tomorrow.month && dt.day == tomorrow.day;
+    final dateLabel = isToday
+        ? 'Danas'
+        : isTomorrow
+            ? 'Sutra'
+            : '${dt.day.toString().padLeft(2, '0')}.${dt.month.toString().padLeft(2, '0')}.${dt.year}.';
+    final timeLabel =
+        '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => AppointmentDetailsScreen(appointmentId: a.id!),
+        ),
+      ).then((_) => _load()),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppColors.primary.withValues(alpha: 0.28)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(Icons.event_available_outlined, color: AppColors.primary),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Text('Sljedeći termin',
+                              style: TextStyle(fontSize: 12, color: Colors.white60)),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(dateLabel,
+                                style: const TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.w600)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(a.dentalServiceName ?? '',
+                          style: const TextStyle(fontWeight: FontWeight.bold)),
+                      Text('${a.doctorName ?? ''} · $timeLabel',
+                          style: const TextStyle(fontSize: 12, color: Colors.white60)),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right, color: Colors.white38),
+              ],
+            ),
+            Divider(height: 24, color: AppColors.primary.withValues(alpha: 0.15)),
+            Row(
+              children: [
+                Icon(Icons.location_on_outlined, size: 14, color: Colors.grey[500]),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    '${ClinicInfo.name} · ${ClinicInfo.address}',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

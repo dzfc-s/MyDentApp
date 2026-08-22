@@ -28,7 +28,7 @@ class _ReviewListState extends State<ReviewList> {
 
   Future<void> initTable() async {
     try {
-      var data = await _provider.get(filter: {});
+      var data = await _provider.get(filter: {"pageSize": 200});
       setState(() {
         result = data;
         isLoading = false;
@@ -58,6 +58,7 @@ class _ReviewListState extends State<ReviewList> {
         width: double.infinity,
         child: SingleChildScrollView(
           child: DataTable(
+            showCheckboxColumn: false,
             columns: const [
               DataColumn(label: Text("Pacijent")),
               DataColumn(label: Text("Doktor")),
@@ -84,10 +85,19 @@ class _ReviewListState extends State<ReviewList> {
                             ),
                           ),
                         )),
-                        DataCell(SizedBox(
-                            width: 200,
-                            child: Text(e.comment ?? '',
-                                overflow: TextOverflow.ellipsis))),
+                        DataCell(
+                          SizedBox(
+                            width: 260,
+                            child: Tooltip(
+                              message: e.comment ?? '',
+                              child: Text(e.comment ?? '',
+                                  overflow: TextOverflow.ellipsis),
+                            ),
+                          ),
+                          onTap: (e.comment ?? '').isEmpty
+                              ? null
+                              : () => _showFullText("Komentar", e.comment!),
+                        ),
                         DataCell(Text(e.isApproved == true ? "Da" : "Ne")),
                         DataCell(Row(
                           mainAxisSize: MainAxisSize.min,
@@ -117,6 +127,22 @@ class _ReviewListState extends State<ReviewList> {
                 List.empty(),
           ),
         ),
+      ),
+    );
+  }
+
+  void _showFullText(String title, String text) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: SizedBox(width: 400, child: Text(text)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Zatvori"),
+          ),
+        ],
       ),
     );
   }

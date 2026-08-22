@@ -34,7 +34,7 @@ namespace MyDent.Services
             return base.IncludeRelatedEntitiesAsync(search, query);
         }
 
-        protected override IEnumerable<News> ApplyFilters(IEnumerable<News> query, NewsSearch? search)
+        protected override IQueryable<News> ApplyFilters(IQueryable<News> query, NewsSearch? search)
         {
             // Public/patient callers only ever see published articles, regardless of what's
             // requested — same private-content principle as Notification, just "not yet public"
@@ -50,10 +50,10 @@ namespace MyDent.Services
 
             if (!string.IsNullOrWhiteSpace(search?.Title))
             {
-                query = query.Where(n => n.Title.Contains(search.Title, StringComparison.OrdinalIgnoreCase));
+                query = query.Where(n => EF.Functions.Like(n.Title, $"%{search.Title}%"));
             }
 
-            return query;
+            return query.OrderByDescending(n => n.PublishedAt);
         }
 
         // GetAllAsync goes through ApplyFilters above, but GetByIdAsync bypasses it — needs its

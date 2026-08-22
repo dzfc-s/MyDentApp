@@ -94,6 +94,25 @@ public class AppointmentsController
         }
     }
 
+    // Staff-only: re-assigning doctor/service/time on an existing appointment (not the patient —
+    // see AppointmentRescheduleRequest for why that's deliberately excluded).
+    [HttpPost("{id}/reschedule")]
+    [Authorize(Roles = "Admin")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<AppointmentResponse>> Reschedule(int id, [FromBody] AppointmentRescheduleRequest request)
+    {
+        try
+        {
+            return await _service.RescheduleAsync(id, request);
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
+    }
+
     [HttpGet("{id}/history")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

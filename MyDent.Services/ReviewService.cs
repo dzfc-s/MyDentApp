@@ -65,7 +65,7 @@ namespace MyDent.Services
             return base.IncludeRelatedEntitiesAsync(search, query);
         }
 
-        protected override IEnumerable<Review> ApplyFilters(IEnumerable<Review> query, ReviewSearch? search)
+        protected override IQueryable<Review> ApplyFilters(IQueryable<Review> query, ReviewSearch? search)
         {
             if (search != null)
             {

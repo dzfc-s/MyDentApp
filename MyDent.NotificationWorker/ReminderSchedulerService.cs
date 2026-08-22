@@ -35,6 +35,7 @@ public class ReminderSchedulerService : BackgroundService
 
                 await SendAppointmentRemindersAsync(dbContext, stoppingToken);
                 await SendRecurringServiceRemindersAsync(dbContext, stoppingToken);
+                await AutoCompletePastAppointmentsAsync(dbContext, stoppingToken);
             }
             catch (Exception ex)
             {
@@ -101,6 +102,57 @@ public class ReminderSchedulerService : BackgroundService
             });
 
             appointment.Reminder2hSentAt = now;
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    // Confirmed appointments whose time has passed used to only ever become Completed if an
+    // Admin remembered to click "Završi" by hand — most clinics don't run that way, an appointment
+    // is just "done" once its slot has passed. This makes that transition automatic; the manual
+    // button in the desktop UI still exists for edge cases (e.g. correcting a stale record), but
+    // isn't the primary path anymore.
+    private static async Task AutoCompletePastAppointmentsAsync(MyDentDbContext dbContext, CancellationToken cancellationToken)
+    {
+        var now = DateTime.UtcNow;
+
+        var due = await dbContext.Appointments
+            .Where(a => a.Status == AppointmentStatus.Confirmed
+                && a.ScheduledAt.AddMinutes(a.DurationMinutes) <= now)
+            .ToListAsync(cancellationToken);
+
+        if (due.Count == 0)
+        {
+            return;
+        }
+
+        // Status-change history requires a real actor (ChangedByUserId is a non-nullable FK) —
+        // there's no authenticated caller in a background worker, so this attributes automatic
+        // completions to the first seeded Admin account, same convention as "system" actions in
+        // apps with no dedicated service-account row.
+        var systemUserId = await dbContext.Users
+            .Where(u => u.UserRoles.Any(ur => ur.Role.Name == "Admin"))
+            .Select(u => u.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (systemUserId == 0)
+        {
+            return;
+        }
+
+        foreach (var appointment in due)
+        {
+            dbContext.AppointmentStatusHistories.Add(new AppointmentStatusHistory
+            {
+                AppointmentId = appointment.Id,
+                FromStatus = AppointmentStatus.Confirmed,
+                ToStatus = AppointmentStatus.Completed,
+                ChangedByUserId = systemUserId,
+                Reason = "Automatski označeno kao završeno (isteklo je vrijeme termina).",
+                ChangedAt = now
+            });
+
+            appointment.Status = AppointmentStatus.Completed;
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);

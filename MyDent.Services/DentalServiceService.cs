@@ -31,9 +31,29 @@ namespace MyDent.Services
         // future appointment booked for something that's no longer offered.
         public override async Task DeleteAsync(int id)
         {
+            await CancelFutureAppointmentsAsync(id);
+            await base.DeleteAsync(id);
+        }
+
+        // DeleteAsync (soft-delete via the "Obriši" action) already cancelled future appointments,
+        // but a service can just as easily be deactivated by unchecking "Aktivna" on the edit form
+        // and saving — that goes through UpdateAsync instead, which had no equivalent cleanup, so a
+        // service could be turned inactive while patients still had upcoming bookings for it.
+        public override async Task<DentalServiceResponse> UpdateAsync(int id, DentalServiceUpdateRequest request)
+        {
+            if (!request.IsActive)
+            {
+                await CancelFutureAppointmentsAsync(id);
+            }
+
+            return await base.UpdateAsync(id, request);
+        }
+
+        private async Task CancelFutureAppointmentsAsync(int dentalServiceId)
+        {
             var now = DateTime.UtcNow;
             var affectedAppointmentIds = await _dbContext.Appointments
-                .Where(a => a.DentalServiceId == id
+                .Where(a => a.DentalServiceId == dentalServiceId
                     && (a.Status == AppointmentStatus.Pending || a.Status == AppointmentStatus.Confirmed)
                     && a.ScheduledAt > now)
                 .Select(a => a.Id)
@@ -46,8 +66,6 @@ namespace MyDent.Services
                     CancellationReason = "Usluga više nije dostupna. Molimo zakažite drugi termin."
                 });
             }
-
-            await base.DeleteAsync(id);
         }
 
         protected override Task<IQueryable<DentalService>> IncludeRelatedEntitiesAsync(DentalServiceSearch? search, IQueryable<DentalService> query = null!)
@@ -56,13 +74,13 @@ namespace MyDent.Services
             return base.IncludeRelatedEntitiesAsync(search, query);
         }
 
-        protected override IEnumerable<DentalService> ApplyFilters(IEnumerable<DentalService> query, DentalServiceSearch? search)
+        protected override IQueryable<DentalService> ApplyFilters(IQueryable<DentalService> query, DentalServiceSearch? search)
         {
             if (search != null)
             {
                 if (!string.IsNullOrWhiteSpace(search.Name))
                 {
-                    query = query.Where(s => s.Name.Contains(search.Name, StringComparison.OrdinalIgnoreCase));
+                    query = query.Where(s => EF.Functions.Like(s.Name, $"%{search.Name}%"));
                 }
 
                 if (search.ServiceCategoryId.HasValue)

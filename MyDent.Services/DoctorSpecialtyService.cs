@@ -27,7 +27,7 @@ namespace MyDent.Services
             return base.IncludeRelatedEntitiesAsync(search, query);
         }
 
-        protected override IEnumerable<DoctorSpecialty> ApplyFilters(IEnumerable<DoctorSpecialty> query, DoctorSpecialtySearch? search)
+        protected override IQueryable<DoctorSpecialty> ApplyFilters(IQueryable<DoctorSpecialty> query, DoctorSpecialtySearch? search)
         {
             if (search != null)
             {

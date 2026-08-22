@@ -37,7 +37,7 @@ namespace MyDent.Services
             return base.IncludeRelatedEntitiesAsync(search, query);
         }
 
-        protected override IEnumerable<Notification> ApplyFilters(IEnumerable<Notification> query, NotificationSearch? search)
+        protected override IQueryable<Notification> ApplyFilters(IQueryable<Notification> query, NotificationSearch? search)
         {
             // A non-Admin only ever sees their own notifications, no matter what UserId they
             // pass in search — this is the private-inbox equivalent of the ownership checks we
@@ -69,7 +69,7 @@ namespace MyDent.Services
                 }
             }
 
-            return query;
+            return query.OrderByDescending(n => n.CreatedAt);
         }
 
         // GetAllAsync goes through ApplyFilters above, but GetByIdAsync bypasses it entirely
@@ -122,10 +122,10 @@ namespace MyDent.Services
             var entity = await _dbContext.Notifications.FindAsync(id)
                 ?? throw new KeyNotFoundException($"Notification with id {id} not found.");
 
-            // No Admin bypass here (unlike Update/Delete elsewhere) — an Admin marking someone
-            // else's notification as read wouldn't reflect reality; only the recipient can have
-            // actually read it.
-            if (entity.UserId != _userAccessor.GetUserId())
+            // Admin bypass, same as Update/Delete — NotificationList is an Admin management
+            // console over every user's notifications, not a personal inbox, so an Admin needs to
+            // be able to mark any of them read from there.
+            if (!_userAccessor.IsInRole("Admin") && entity.UserId != _userAccessor.GetUserId())
             {
                 throw new KeyNotFoundException($"Notification with id {id} not found.");
             }

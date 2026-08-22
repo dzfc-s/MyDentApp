@@ -97,16 +97,16 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
           children: [
             Text(
               _isEditing
-                  ? (fullName.isEmpty ? 'Edit User' : fullName)
-                  : 'New User',
+                  ? (fullName.isEmpty ? 'Uredi korisnika' : fullName)
+                  : 'Novi korisnik',
               style: theme.textTheme.headlineSmall
                   ?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 2),
             Text(
               _isEditing
-                  ? 'Update profile and account settings'
-                  : 'Fill in the details to create a new user',
+                  ? 'Ažurirajte profil i postavke naloga'
+                  : 'Popunite podatke za kreiranje novog korisnika',
               style: theme.textTheme.bodyMedium
                   ?.copyWith(color: theme.colorScheme.outline),
             ),
@@ -152,7 +152,7 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
   Widget _buildPersonalSection(ThemeData theme) {
     return _buildSectionCard(
       theme: theme,
-      title: 'Personal Information',
+      title: 'Lični podaci',
       icon: Icons.badge_outlined,
       child: FormBuilder(
         key: _formKey,
@@ -164,14 +164,14 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
                 Expanded(
                   child: FormBuilderTextField(
                     name: 'firstName',
-                    decoration: _inputDecoration('First Name', Icons.person_outline),
+                    decoration: _inputDecoration('Ime', Icons.person_outline),
                   ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: FormBuilderTextField(
                     name: 'lastName',
-                    decoration: _inputDecoration('Last Name', Icons.person_outline),
+                    decoration: _inputDecoration('Prezime', Icons.person_outline),
                   ),
                 ),
               ],
@@ -179,7 +179,7 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
             const SizedBox(height: 16),
             FormBuilderTextField(
               name: 'phoneNumber',
-              decoration: _inputDecoration('Phone Number', Icons.phone_outlined),
+              decoration: _inputDecoration('Broj telefona', Icons.phone_outlined),
               keyboardType: TextInputType.phone,
             ),
           ],
@@ -191,7 +191,7 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
   Widget _buildAccountSection(ThemeData theme) {
     return _buildSectionCard(
       theme: theme,
-      title: 'Account Details',
+      title: 'Podaci o nalogu',
       icon: Icons.manage_accounts_outlined,
       child: Column(
         children: [
@@ -201,7 +201,7 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
                 child: FormBuilderTextField(
                   name: 'username',
                   decoration:
-                      _inputDecoration('Username', Icons.alternate_email),
+                      _inputDecoration('Korisničko ime', Icons.alternate_email),
                 ),
               ),
               const SizedBox(width: 16),
@@ -218,7 +218,7 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
             const SizedBox(height: 16),
             FormBuilderTextField(
               name: 'password',
-              decoration: _inputDecoration('Password', Icons.lock_outline),
+              decoration: _inputDecoration('Lozinka', Icons.lock_outline),
               obscureText: true,
             ),
           ],
@@ -230,12 +230,12 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
   Widget _buildStatusSection(ThemeData theme) {
     return _buildSectionCard(
       theme: theme,
-      title: 'Account Status',
+      title: 'Status naloga',
       icon: Icons.toggle_on_outlined,
       child: FormBuilderCheckbox(
         name: 'isActive',
-        title: const Text("Active account"),
-        subtitle: const Text("User can log in and access the system"),
+        title: const Text("Aktivan nalog"),
+        subtitle: const Text("Korisnik se može prijaviti i pristupiti sistemu"),
         activeColor: theme.colorScheme.primary,
         decoration: const InputDecoration(border: InputBorder.none),
       ),
@@ -258,13 +258,13 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
         OutlinedButton.icon(
           onPressed: () => Navigator.of(context).pop(),
           icon: const Icon(Icons.close),
-          label: const Text("Cancel"),
+          label: const Text("Odustani"),
         ),
         const SizedBox(width: 12),
         FilledButton.icon(
           onPressed: _save,
           icon: Icon(_isEditing ? Icons.save_outlined : Icons.person_add_outlined),
-          label: Text(_isEditing ? "Save Changes" : "Create User"),
+          label: Text(_isEditing ? "Sačuvaj izmjene" : "Kreiraj korisnika"),
         ),
       ],
     );
@@ -292,7 +292,7 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Error saving user: $e"),
+            content: Text("Greška prilikom čuvanja korisnika: $e"),
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );

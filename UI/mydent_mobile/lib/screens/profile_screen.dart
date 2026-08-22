@@ -10,6 +10,7 @@ import '../providers/user_provider.dart';
 import '../utils/utils_widgets.dart';
 import 'change_password_screen.dart';
 import 'health_record_screen.dart';
+import 'my_reviews_screen.dart';
 import 'notification_settings_screen.dart';
 import 'profile_settings_screen.dart';
 
@@ -87,6 +88,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           Text(user!.username ?? '', style: TextStyle(color: Colors.grey[600])),
+          if (user!.createdAt != null) ...[
+            const SizedBox(height: 4),
+            Text('Pacijent od ${user!.createdAt!.toLocal().year}.',
+                style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+          ],
           const SizedBox(height: 32),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -123,6 +129,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     },
                   ),
                   ListTile(
+                    leading: const Icon(Icons.star_outline),
+                    title: const Text("Moje recenzije"),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const MyReviewsScreen()),
+                    ),
+                  ),
+                  ListTile(
                     leading: const Icon(Icons.lock_outline),
                     title: const Text("Promijeni lozinku"),
                     onTap: () => Navigator.push(
@@ -140,6 +154,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ),
                   ListTile(
+                    leading: const Icon(Icons.security_outlined),
+                    title: const Text("Dvofaktorska autentifikacija"),
+                    trailing: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text("Uskoro",
+                          style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+                    ),
+                    onTap: _show2faComingSoon,
+                  ),
+                  ListTile(
                     leading: const Icon(Icons.logout),
                     title: const Text("Odjava"),
                     onTap: _logout,
@@ -147,6 +175,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ],
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The Figma reference shows a 2FA toggle, but there is no backend support
+  /// for it (no TOTP/SMS enrollment, no verification endpoint) — rather than
+  /// show a switch that flips on and does nothing, this is an honest "not
+  /// available yet" notice so nobody thinks their account is more protected
+  /// than it actually is.
+  void _show2faComingSoon() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Dvofaktorska autentifikacija"),
+        content: const Text(
+            "Ova funkcija još nije dostupna. Radimo na njoj i biće omogućena u budućoj verziji aplikacije."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("U redu"),
           ),
         ],
       ),

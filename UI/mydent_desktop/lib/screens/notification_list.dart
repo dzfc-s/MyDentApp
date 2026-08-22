@@ -7,6 +7,7 @@ import '../models/search_result.dart';
 import '../models/user.dart';
 import '../providers/notification_provider.dart';
 import '../providers/user_provider.dart';
+import '../theme/app_theme.dart';
 import '../utils/utils_widgets.dart';
 
 class NotificationList extends StatefulWidget {
@@ -33,7 +34,20 @@ class _NotificationListState extends State<NotificationList> {
 
   Future<void> initTable() async {
     try {
-      var data = await _provider.get(filter: {});
+      var data = await _provider.get(filter: {"pageSize": 100});
+      // Unread first (then most recent within each group) — a management
+      // console for every user's notifications is much more useful when the
+      // things still needing attention aren't buried under already-read ones.
+      final items = [...?data.items];
+      items.sort((a, b) {
+        final unreadCmp = (a.isRead == true ? 1 : 0).compareTo(b.isRead == true ? 1 : 0);
+        if (unreadCmp != 0) return unreadCmp;
+        final aCreated = a.createdAt;
+        final bCreated = b.createdAt;
+        if (aCreated == null || bCreated == null) return 0;
+        return bCreated.compareTo(aCreated);
+      });
+      data.items = items;
       setState(() {
         result = data;
         isLoading = false;
@@ -76,6 +90,7 @@ class _NotificationListState extends State<NotificationList> {
         width: double.infinity,
         child: SingleChildScrollView(
           child: DataTable(
+            showCheckboxColumn: false,
             columns: const [
               DataColumn(label: Text("Korisnik")),
               DataColumn(label: Text("Naslov")),
@@ -85,14 +100,50 @@ class _NotificationListState extends State<NotificationList> {
             ],
             rows: result?.items
                     ?.map(
-                      (e) => DataRow(cells: [
-                        DataCell(Text(e.userName ?? '')),
-                        DataCell(Text(e.title ?? '')),
-                        DataCell(SizedBox(
-                            width: 250,
-                            child: Text(e.message ?? '',
-                                overflow: TextOverflow.ellipsis))),
-                        DataCell(Text(e.isRead == true ? "Da" : "Ne")),
+                      (e) {
+                        final unread = e.isRead != true;
+                        final textStyle = unread
+                            ? const TextStyle(fontWeight: FontWeight.bold)
+                            : null;
+                        return DataRow(
+                        color: unread
+                            ? WidgetStateProperty.all(const Color(0xFFF3F1F8))
+                            : null,
+                        cells: [
+                        DataCell(Text(e.userName ?? '', style: textStyle)),
+                        DataCell(Text(e.title ?? '', style: textStyle)),
+                        DataCell(
+                          SizedBox(
+                            width: 300,
+                            child: Tooltip(
+                              message: e.message ?? '',
+                              child: Text(e.message ?? '',
+                                  style: textStyle,
+                                  overflow: TextOverflow.ellipsis),
+                            ),
+                          ),
+                          onTap: (e.message ?? '').isEmpty
+                              ? null
+                              : () => _showFullText(e.title ?? "Poruka", e.message!),
+                        ),
+                        DataCell(unread
+                            ? Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    width: 8,
+                                    height: 8,
+                                    margin: const EdgeInsets.only(right: 6),
+                                    decoration: const BoxDecoration(
+                                      color: AppColors.danger,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  const Text("Novo",
+                                      style: TextStyle(fontWeight: FontWeight.bold)),
+                                ],
+                              )
+                            : const Text("Pročitano")),
                         DataCell(Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -123,12 +174,30 @@ class _NotificationListState extends State<NotificationList> {
                             ),
                           ],
                         )),
-                      ]),
+                      ],
+                        );
+                      },
                     )
                     .toList() ??
                 List.empty(),
           ),
         ),
+      ),
+    );
+  }
+
+  void _showFullText(String title, String text) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: SizedBox(width: 400, child: Text(text)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Zatvori"),
+          ),
+        ],
       ),
     );
   }

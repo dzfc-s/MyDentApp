@@ -4,25 +4,24 @@ import 'package:provider/provider.dart';
 import '../main.dart';
 import '../providers/auth_provider.dart';
 import '../screens/appointment_list.dart';
-import '../screens/dental_service_list.dart';
+import '../screens/category_service_list.dart';
+import '../screens/dashboard_screen.dart';
 import '../screens/doctor_absence_list.dart';
 import '../screens/doctor_list.dart';
-import '../screens/doctor_specialty_list.dart';
-import '../screens/doctor_working_hours_list.dart';
 import '../screens/news_list.dart';
 import '../screens/notification_list.dart';
 import '../screens/payment_list.dart';
 import '../screens/review_list.dart';
-import '../screens/service_category_list.dart';
 import '../screens/user_list.dart';
+import '../models/enums.dart';
+import '../providers/appointment_provider.dart';
 import '../theme/app_theme.dart';
+import '../widgets/tooth_icon.dart';
 
 enum AppSection {
-  serviceCategories,
+  dashboard,
   dentalServices,
   doctors,
-  doctorSpecialties,
-  doctorWorkingHours,
   doctorAbsences,
   appointments,
   reviews,
@@ -66,9 +65,41 @@ class MasterScreen extends StatelessWidget {
   }
 }
 
-class _TopBar extends StatelessWidget {
+class _TopBar extends StatefulWidget {
   const _TopBar({required this.title});
   final String title;
+
+  @override
+  State<_TopBar> createState() => _TopBarState();
+}
+
+class _TopBarState extends State<_TopBar> {
+  int _pendingCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    // Fires on every MasterScreen (every admin screen wraps its content in
+    // one), so the badge is always fresh on every navigation without a
+    // shared reactive store — appointment status changes almost always
+    // happen via a full screen navigation anyway (confirm/cancel/reschedule
+    // all call initTable() on their own screen, not this one).
+    _refreshPendingCount();
+  }
+
+  Future<void> _refreshPendingCount() async {
+    try {
+      final result = await context.read<AppointmentProvider>().get(filter: {
+        "status": AppointmentStatus.pending.index,
+        "includeTotalCount": true,
+        "pageSize": 1,
+      });
+      if (!mounted) return;
+      setState(() => _pendingCount = result.totalCount ?? 0);
+    } catch (_) {
+      // Badge staying at its last value beats crashing the whole top bar.
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -81,10 +112,61 @@ class _TopBar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Text(title,
+          Text(widget.title,
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
           const Spacer(),
-          const Icon(Icons.notifications_none, color: Colors.black54),
+          Tooltip(
+            message: 'Termini na čekanju',
+            child: Material(
+              color: _pendingCount > 0 ? AppColors.danger : const Color(0xFFF6F4FB),
+              borderRadius: BorderRadius.circular(999),
+              elevation: _pendingCount > 0 ? 2 : 0,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(999),
+                onTap: () async {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const AppointmentList(
+                          initialStatus: AppointmentStatus.pending),
+                    ),
+                  );
+                  _refreshPendingCount();
+                },
+                // A plain icon (even with a small dot badge) reads as decoration
+                // easy to skim past — when there's actually something to act on,
+                // this becomes a solid, labeled pill instead, so it can't be
+                // mistaken for a passive status indicator.
+                child: Padding(
+                  padding: EdgeInsets.symmetric(
+                      horizontal: _pendingCount > 0 ? 16 : 10, vertical: 10),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _pendingCount > 0
+                            ? Icons.notifications_active
+                            : Icons.notifications_none,
+                        size: 26,
+                        color: _pendingCount > 0 ? Colors.white : Colors.black54,
+                      ),
+                      if (_pendingCount > 0) ...[
+                        const SizedBox(width: 8),
+                        Text(
+                          "${_pendingCount > 99 ? '99+' : _pendingCount} na čekanju",
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -107,11 +189,10 @@ class _Sidebar extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(20, 28, 20, 20),
             child: Row(
               children: [
-                CircleAvatar(
-                  backgroundColor: AppColors.primary,
+                const CircleAvatar(
+                  backgroundColor: Colors.white,
                   radius: 18,
-                  child: const Icon(Icons.medical_services_outlined,
-                      color: Colors.white, size: 18),
+                  child: ToothLogo(width: 15),
                 ),
                 const SizedBox(width: 10),
                 const Column(
@@ -134,18 +215,14 @@ class _Sidebar extends StatelessWidget {
             child: ListView(
               padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
               children: [
+                _tile(context, Icons.space_dashboard_outlined, 'Početna',
+                    AppSection.dashboard, () => const DashboardScreen()),
                 _tile(context, Icons.calendar_month, 'Rezervacije',
                     AppSection.appointments, () => const AppointmentList()),
-                _tile(context, Icons.category_outlined, 'Kategorije usluga',
-                    AppSection.serviceCategories, () => const ServiceCategoryList()),
                 _tile(context, Icons.medical_services_outlined, 'Usluge',
-                    AppSection.dentalServices, () => const DentalServiceList()),
+                    AppSection.dentalServices, () => const CategoryServiceList()),
                 _tile(context, Icons.people_alt_outlined, 'Doktori',
                     AppSection.doctors, () => const DoctorList()),
-                _tile(context, Icons.workspace_premium_outlined, 'Specijalnosti',
-                    AppSection.doctorSpecialties, () => const DoctorSpecialtyList()),
-                _tile(context, Icons.schedule, 'Radno vrijeme',
-                    AppSection.doctorWorkingHours, () => const DoctorWorkingHoursList()),
                 _tile(context, Icons.event_busy, 'Odsustva',
                     AppSection.doctorAbsences, () => const DoctorAbsenceList()),
                 _tile(context, Icons.reviews_outlined, 'Recenzije',

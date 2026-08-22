@@ -8,6 +8,22 @@ import 'base_provider.dart';
 class NotificationProvider extends BaseProvider<AppNotification> {
   NotificationProvider() : super("Notifications");
 
+  int unreadCount = 0;
+
+  /// Cheap count-only fetch (pageSize:1, IncludeTotalCount) — every mutating
+  /// method below calls this so any widget watching this provider (bell
+  /// badge, bottom-nav badge) updates the moment something is read/created/
+  /// deleted, without each screen having to remember to refresh it manually.
+  Future<void> refreshUnreadCount() async {
+    try {
+      final result = await get(filter: {"isRead": false, "includeTotalCount": true, "pageSize": 1});
+      unreadCount = result.totalCount ?? 0;
+      notifyListeners();
+    } catch (_) {
+      // Leave the last known count on failure — a stale badge beats a crash.
+    }
+  }
+
   @override
   AppNotification fromJson(data) =>
       AppNotification.fromJson(data as Map<String, dynamic>);
@@ -16,6 +32,21 @@ class NotificationProvider extends BaseProvider<AppNotification> {
     final uri = Uri.parse("$baseUrl$endpoint/$id/markAsRead");
     final response = await http.post(uri, headers: createHeaders());
     validateResponse(response);
-    return fromJson(jsonDecode(response.body));
+    final result = fromJson(jsonDecode(response.body));
+    await refreshUnreadCount();
+    return result;
+  }
+
+  @override
+  Future<AppNotification> insert(dynamic request) async {
+    final result = await super.insert(request);
+    await refreshUnreadCount();
+    return result;
+  }
+
+  @override
+  Future remove(int id) async {
+    await super.remove(id);
+    await refreshUnreadCount();
   }
 }

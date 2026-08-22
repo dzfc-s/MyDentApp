@@ -120,6 +120,17 @@ class StatusBadge extends StatelessWidget {
     return StatusBadge(label: status.label, color: color, background: bg);
   }
 
+  /// Generic Aktivna/Neaktivna pill — Figma shows entity active state as a
+  /// colored pill rather than a plain "Da/Ne" text cell (used by the
+  /// services table so far; any other list can reuse it the same way).
+  factory StatusBadge.active(bool isActive) {
+    return StatusBadge(
+      label: isActive ? 'Aktivna' : 'Neaktivna',
+      color: isActive ? AppColors.success : AppColors.danger,
+      background: isActive ? AppColors.successContainer : AppColors.dangerContainer,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(

@@ -62,15 +62,15 @@ namespace MyDent.Services
             return base.IncludeRelatedEntitiesAsync(search, query);
         }
 
-        protected override IEnumerable<Doctor> ApplyFilters(IEnumerable<Doctor> query, DoctorSearch? search)
+        protected override IQueryable<Doctor> ApplyFilters(IQueryable<Doctor> query, DoctorSearch? search)
         {
             if (search != null)
             {
                 if (!string.IsNullOrWhiteSpace(search.Name))
                 {
                     query = query.Where(d =>
-                        d.FirstName.Contains(search.Name, StringComparison.OrdinalIgnoreCase) ||
-                        d.LastName.Contains(search.Name, StringComparison.OrdinalIgnoreCase));
+                        EF.Functions.Like(d.FirstName, $"%{search.Name}%") ||
+                        EF.Functions.Like(d.LastName, $"%{search.Name}%"));
                 }
 
                 if (search.IsActive.HasValue)

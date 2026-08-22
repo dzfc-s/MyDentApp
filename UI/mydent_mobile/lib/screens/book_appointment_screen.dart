@@ -6,11 +6,25 @@ import '../models/dental_service.dart';
 import '../models/doctor.dart';
 import '../models/search_result.dart';
 import '../providers/appointment_provider.dart';
-import '../providers/auth_provider.dart';
 import '../providers/doctor_provider.dart';
+import '../providers/review_provider.dart';
 import '../utils/utils_widgets.dart';
 import '../widgets/asset_avatar.dart';
-import 'appointment_details_screen.dart';
+import '../widgets/booking_steps.dart';
+import 'booking_confirm_screen.dart';
+
+/// Average rating + review count for one doctor, shown on their picker card.
+/// There's no "total appointments" stat here (unlike the Figma reference's
+/// doctor cards) — AppointmentService scopes non-Admin GETs to the caller's
+/// own appointments only, so a patient-facing screen has no legitimate way
+/// to ask the API "how many appointments has this doctor had in total."
+/// Review count/rating is real data a patient CAN see (Reviews isn't scoped
+/// that way) and serves the same "social proof" purpose.
+class _DoctorStats {
+  const _DoctorStats(this.avgRating, this.reviewCount);
+  final double avgRating;
+  final int reviewCount;
+}
 
 class BookAppointmentScreen extends StatefulWidget {
   final DentalService service;
@@ -29,9 +43,9 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
   Doctor? _selectedDoctor;
   DateTime _selectedDate = DateTime.now();
   List<AvailableSlot> _slots = [];
+  Map<int, _DoctorStats> _doctorStats = {};
   bool isLoadingDoctors = true;
   bool isLoadingSlots = false;
-  bool isBooking = false;
 
   @override
   void initState() {
@@ -54,9 +68,31 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
         isLoadingDoctors = false;
       });
       if (_selectedDoctor != null) _loadSlots();
+      _loadDoctorStats(data.items ?? []);
     } on Exception catch (e) {
       alertBox(context, 'Greška', e.toString());
     }
+  }
+
+  Future<void> _loadDoctorStats(List<Doctor> list) async {
+    final reviewProvider = context.read<ReviewProvider>();
+    final entries = await Future.wait(list.map((d) async {
+      try {
+        final r = await reviewProvider.get(filter: {"doctorId": d.id, "pageSize": 200});
+        final ratings = (r.items ?? [])
+            .map((rv) => rv.rating ?? 0)
+            .where((v) => v > 0)
+            .toList();
+        final avg = ratings.isEmpty
+            ? 0.0
+            : ratings.reduce((a, b) => a + b) / ratings.length;
+        return MapEntry(d.id!, _DoctorStats(avg, ratings.length));
+      } catch (_) {
+        return MapEntry(d.id!, const _DoctorStats(0, 0));
+      }
+    }));
+    if (!mounted) return;
+    setState(() => _doctorStats = Map.fromEntries(entries));
   }
 
   Future<void> _loadSlots() async {
@@ -79,6 +115,11 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
     }
   }
 
+  String _formatTime(DateTime dt) {
+    final t = dt.toLocal();
+    return "${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}";
+  }
+
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
       context: context,
@@ -92,72 +133,114 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
     }
   }
 
-  Future<void> _book(AvailableSlot slot) async {
-    setState(() => isBooking = true);
-    try {
-      final appointment = await _appointmentProvider.insert({
-        "patientId": AuthProvider.userId,
-        "doctorId": _selectedDoctor!.id,
-        "dentalServiceId": widget.service.id,
-        "scheduledAt": slot.startTime!.toIso8601String(),
-      });
-      if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => AppointmentDetailsScreen(appointmentId: appointment.id!),
+  /// Doesn't book yet — hands off to [BookingConfirmScreen], which shows a
+  /// summary + cancellation policy and only calls the booking API once the
+  /// patient explicitly confirms (see that screen's doc comment for why).
+  void _selectSlot(AvailableSlot slot) {
+    if (_selectedDoctor == null) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => BookingConfirmScreen(
+          service: widget.service,
+          doctor: _selectedDoctor!,
+          slot: slot,
         ),
-      );
-    } on Exception catch (e) {
-      setState(() => isBooking = false);
-      if (mounted) alertBox(context, 'Greška', e.toString());
-    }
+      ),
+    );
+  }
+
+  Widget _buildDoctorCard(Doctor d) {
+    final selected = _selectedDoctor?.id == d.id;
+    final stats = _doctorStats[d.id];
+    final primary = Theme.of(context).colorScheme.primary;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () {
+          setState(() => _selectedDoctor = d);
+          _loadSlots();
+        },
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: selected ? primary : Colors.grey.withValues(alpha: 0.3),
+              width: selected ? 2 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              AssetAvatar(assetId: d.photoAssetId, radius: 24),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text("${d.firstName} ${d.lastName}",
+                        style: const TextStyle(fontWeight: FontWeight.w600)),
+                    if ((d.bio ?? '').isNotEmpty)
+                      Text(d.bio!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+                    const SizedBox(height: 4),
+                    if (stats != null && stats.reviewCount > 0)
+                      Row(
+                        children: [
+                          const Icon(Icons.star, size: 14, color: Colors.amber),
+                          const SizedBox(width: 3),
+                          Text(stats.avgRating.toStringAsFixed(1),
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                          const SizedBox(width: 4),
+                          Text('(${stats.reviewCount} recenzija)',
+                              style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+                        ],
+                      )
+                    else
+                      Text('Nema recenzija još',
+                          style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+                  ],
+                ),
+              ),
+              if (selected) Icon(Icons.check_circle, color: primary),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text("Zakazivanje — ${widget.service.name}")),
-      body: isLoadingDoctors
-          ? const Center(child: CircularProgressIndicator())
-          : (doctors?.items?.isEmpty ?? true)
-              ? const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(24.0),
-                    child: Text(
-                      "Trenutno nema dostupnih doktora za ovu kategoriju usluge.",
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                )
-              : ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
+      body: Column(
+        children: [
+          const BookingSteps(step: 2),
+          Expanded(
+            child: isLoadingDoctors
+                ? const Center(child: CircularProgressIndicator())
+                : (doctors?.items?.isEmpty ?? true)
+                    ? const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(24.0),
+                          child: Text(
+                            "Trenutno nema dostupnih doktora za ovu kategoriju usluge.",
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      )
+                    : ListView(
+                        padding: const EdgeInsets.all(16),
+                        children: [
                     Text("Doktor", style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: 8),
-                    DropdownButtonFormField<Doctor>(
-                      initialValue: _selectedDoctor,
-                      decoration: const InputDecoration(border: OutlineInputBorder()),
-                      items: doctors!.items!
-                          .map((d) => DropdownMenuItem(
-                                value: d,
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    AssetAvatar(
-                                        assetId: d.photoAssetId, radius: 14),
-                                    const SizedBox(width: 10),
-                                    Text("${d.firstName} ${d.lastName}"),
-                                  ],
-                                ),
-                              ))
-                          .toList(),
-                      onChanged: (d) {
-                        setState(() => _selectedDoctor = d);
-                        _loadSlots();
-                      },
-                    ),
-                    const SizedBox(height: 24),
+                    ...doctors!.items!.map(_buildDoctorCard),
+                    const SizedBox(height: 16),
                     Text("Datum", style: Theme.of(context).textTheme.titleMedium),
                     const SizedBox(height: 8),
                     OutlinedButton.icon(
@@ -173,7 +256,14 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                       const Center(child: CircularProgressIndicator())
                     else if (_slots.isEmpty)
                       const Text("Nema dostupnih termina za odabrani datum.")
-                    else
+                    else ...[
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Text(
+                          "Prvi slobodan termin dana: ${_formatTime(_slots.first.startTime!)}",
+                          style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                        ),
+                      ),
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
@@ -183,12 +273,16 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                               "${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}";
                           return ActionChip(
                             label: Text(label),
-                            onPressed: isBooking ? null : () => _book(s),
+                            onPressed: () => _selectSlot(s),
                           );
                         }).toList(),
                       ),
-                  ],
-                ),
+                    ],
+                        ],
+                      ),
+          ),
+        ],
+      ),
     );
   }
 }

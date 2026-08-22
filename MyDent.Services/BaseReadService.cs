@@ -15,8 +15,13 @@ namespace MyDent.Services
         where TSearch : BaseSearchObject
     {
         // An unbounded "get all" is treated as a defect — cap how much a single request can pull
-        // back regardless of what PageSize the caller asks for.
-        private const int MaxPageSize = 100;
+        // back regardless of what PageSize the caller asks for. Raised from the original 100 to
+        // 2000 to match the app's own documented bulk-fetch call sites (e.g. the desktop dashboard
+        // aggregates client-side over "the full dataset" with pageSize:2000) — those were silently
+        // truncated to 100 rows before, which was a correctness bug (wrong totals/charts), not just
+        // a style choice. Safe to raise now that filtering/paging below execute in SQL instead of
+        // pulling the whole table into memory first (see ApplyFilters below).
+        private const int MaxPageSize = 2000;
 
         protected readonly MapsterMapper.IMapper _mapper;
         protected readonly MyDentDbContext _dbContext;
@@ -30,27 +35,29 @@ namespace MyDent.Services
 
         /// <summary>
         /// Applies search filters to the query. Override in derived classes to implement specific filtering logic.
+        /// IQueryable, not IEnumerable — so the Where/OrderBy clauses below compose into one SQL query instead of
+        /// forcing the entire table to be loaded into memory before filtering (see history for the bug this fixed).
         /// </summary>
-        protected abstract IEnumerable<TEntity> ApplyFilters(IEnumerable<TEntity> query, TSearch? search);
+        protected abstract IQueryable<TEntity> ApplyFilters(IQueryable<TEntity> query, TSearch? search);
 
         public virtual async Task<PageResult<TResponse>> GetAllAsync(TSearch? search = null)
         {
-            IEnumerable<TEntity> query = this._dbContext.Set<TEntity>();
+            IQueryable<TEntity> query = this._dbContext.Set<TEntity>();
 
-            query = await IncludeRelatedEntitiesAsync(search, query.AsQueryable());
+            query = await IncludeRelatedEntitiesAsync(search, query);
             query = ApplyFilters(query, search);
 
             int? totalCount = null;
 
             if (search.IncludeTotalCount ?? false)
             {
-                totalCount = query.Count();
+                totalCount = await query.CountAsync();
             }
 
             if (!string.IsNullOrWhiteSpace(search.SortBy))
             {
                 //TODO: parametrize sortBy to prevent SQL injection
-                query = query.AsQueryable().OrderBy(search.SortBy);
+                query = query.OrderBy(search.SortBy);
             }
 
             var effectivePageSize = Math.Min(search.PageSize ?? MaxPageSize, MaxPageSize);
@@ -62,7 +69,11 @@ namespace MyDent.Services
 
             query = query.Take(effectivePageSize);
 
-            var list = query.Select(item => _mapper.Map<TResponse>(item)).ToList();
+            // Materialize only this page of raw entities first, then project to the response DTO
+            // in memory — the Mapster mapping call isn't SQL-translatable, so it can't be part of
+            // the IQueryable pipeline above.
+            var entities = await query.ToListAsync();
+            var list = entities.Select(item => _mapper.Map<TResponse>(item)).ToList();
 
             var pageResult = new PageResult<TResponse>
             {
@@ -70,7 +81,7 @@ namespace MyDent.Services
                 TotalCount = totalCount
             };
 
-            return await Task.FromResult(pageResult);
+            return pageResult;
         }
 
         protected virtual async Task<IQueryable<TEntity>> IncludeRelatedEntitiesAsync(TSearch? search, IQueryable<TEntity> query = null)

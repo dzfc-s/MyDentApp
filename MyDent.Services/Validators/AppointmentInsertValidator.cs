@@ -54,6 +54,16 @@ namespace MyDent.Services.Validators
                     return;
                 }
 
+                var hasMatchingSpecialty = await dbContext.DoctorSpecialties.AnyAsync(ds =>
+                    ds.DoctorId == request.DoctorId && ds.ServiceCategoryId == dentalService.ServiceCategoryId,
+                    cancellation);
+
+                if (!hasMatchingSpecialty)
+                {
+                    context.AddFailure("DoctorId", "The selected doctor is not specialized in this service's category.");
+                    return;
+                }
+
                 var dayOfWeek = request.ScheduledAt.DayOfWeek;
                 var startTime = request.ScheduledAt.TimeOfDay;
                 var endTime = startTime + TimeSpan.FromMinutes(dentalService.DurationMinutes);

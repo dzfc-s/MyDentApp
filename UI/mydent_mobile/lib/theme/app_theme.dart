@@ -19,6 +19,18 @@ class AppColors {
   static const dangerContainer = Color(0xFF3A1414);
 }
 
+/// Single-location clinic — name/address as shown in the Figma reference
+/// (PatientApp.tsx), reused wherever a screen needs to display where the
+/// appointment actually is (booking confirm/success, home's next-appointment
+/// card). Not backed by any API field; hardcode here once rather than in
+/// every call site so it only needs updating in one place if that changes.
+class ClinicInfo {
+  ClinicInfo._();
+
+  static const name = 'Stom. ordinacija Dr. Pinjić';
+  static const address = 'Kardinala Stepinca 12, Mostar';
+}
+
 ThemeData buildAppTheme() {
   final colorScheme = ColorScheme.fromSeed(
     seedColor: AppColors.primary,

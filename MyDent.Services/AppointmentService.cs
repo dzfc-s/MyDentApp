@@ -38,7 +38,7 @@ namespace MyDent.Services
             return base.IncludeRelatedEntitiesAsync(search, query);
         }
 
-        protected override IEnumerable<Appointment> ApplyFilters(IEnumerable<Appointment> query, AppointmentSearch? search)
+        protected override IQueryable<Appointment> ApplyFilters(IQueryable<Appointment> query, AppointmentSearch? search)
         {
             if (search != null)
             {
@@ -55,15 +55,13 @@ namespace MyDent.Services
                 if (!string.IsNullOrWhiteSpace(search.PatientName))
                 {
                     query = query.Where(a =>
-                        (a.Patient.FirstName + " " + a.Patient.LastName)
-                            .Contains(search.PatientName, StringComparison.OrdinalIgnoreCase));
+                        EF.Functions.Like(a.Patient.FirstName + " " + a.Patient.LastName, $"%{search.PatientName}%"));
                 }
 
                 if (!string.IsNullOrWhiteSpace(search.DoctorName))
                 {
                     query = query.Where(a =>
-                        (a.Doctor.FirstName + " " + a.Doctor.LastName)
-                            .Contains(search.DoctorName, StringComparison.OrdinalIgnoreCase));
+                        EF.Functions.Like(a.Doctor.FirstName + " " + a.Doctor.LastName, $"%{search.DoctorName}%"));
                 }
 
                 if (search.DentalServiceId.HasValue)
@@ -87,7 +85,7 @@ namespace MyDent.Services
                 }
             }
 
-            return query;
+            return query.OrderByDescending(a => a.CreatedAt);
         }
 
         // Same rules AppointmentInsertValidator checks against one candidate ScheduledAt (working
@@ -282,6 +280,97 @@ namespace MyDent.Services
             }
 
             await AddStatusHistoryAsync(entity, AppointmentStatus.Completed, reason: null);
+            await _dbContext.SaveChangesAsync();
+
+            return _mapper.Map<AppointmentResponse>(entity);
+        }
+
+        public async Task<AppointmentResponse> RescheduleAsync(int id, AppointmentRescheduleRequest request)
+        {
+            var entity = await _dbContext.Appointments.FindAsync(id)
+                ?? throw new KeyNotFoundException($"Appointment with id {id} not found.");
+
+            if (entity.Status != AppointmentStatus.Pending && entity.Status != AppointmentStatus.Confirmed)
+            {
+                throw new ClientException($"Cannot reschedule an appointment with status {entity.Status}.");
+            }
+
+            var doctor = await _dbContext.Doctors.AsNoTracking()
+                .FirstOrDefaultAsync(d => d.Id == request.DoctorId && d.IsActive)
+                ?? throw new ClientException($"Doctor with id {request.DoctorId} does not exist or is not active.");
+
+            var dentalService = await _dbContext.DentalServices.AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Id == request.DentalServiceId && s.IsActive)
+                ?? throw new ClientException($"DentalService with id {request.DentalServiceId} does not exist or is not active.");
+
+            var hasMatchingSpecialty = await _dbContext.DoctorSpecialties.AnyAsync(ds =>
+                ds.DoctorId == request.DoctorId && ds.ServiceCategoryId == dentalService.ServiceCategoryId);
+            if (!hasMatchingSpecialty)
+            {
+                throw new ClientException("The selected doctor is not specialized in this service's category.");
+            }
+
+            if (request.ScheduledAt <= DateTime.UtcNow)
+            {
+                throw new ClientException("ScheduledAt must be in the future.");
+            }
+
+            var dayOfWeek = request.ScheduledAt.DayOfWeek;
+            var startTime = request.ScheduledAt.TimeOfDay;
+            var endTime = startTime + TimeSpan.FromMinutes(dentalService.DurationMinutes);
+
+            var isWithinWorkingHours = await _dbContext.DoctorWorkingHours.AnyAsync(w =>
+                w.DoctorId == request.DoctorId &&
+                w.DayOfWeek == dayOfWeek &&
+                w.StartTime <= startTime &&
+                w.EndTime >= endTime);
+            if (!isWithinWorkingHours)
+            {
+                throw new ClientException("The doctor does not work at the requested day/time.");
+            }
+
+            var scheduledDate = DateOnly.FromDateTime(request.ScheduledAt);
+            var isOnAbsence = await _dbContext.DoctorAbsences.AnyAsync(a =>
+                a.DoctorId == request.DoctorId &&
+                a.StartDate <= scheduledDate &&
+                a.EndDate >= scheduledDate);
+            if (isOnAbsence)
+            {
+                throw new ClientException("The doctor is on absence on the requested date.");
+            }
+
+            var newEnd = request.ScheduledAt.AddMinutes(dentalService.DurationMinutes);
+
+            var doctorConflict = await _dbContext.Appointments.AsNoTracking().FirstOrDefaultAsync(a =>
+                a.Id != id &&
+                a.DoctorId == request.DoctorId &&
+                a.Status != AppointmentStatus.Cancelled &&
+                a.ScheduledAt < newEnd &&
+                a.ScheduledAt.AddMinutes(a.DurationMinutes) > request.ScheduledAt);
+            if (doctorConflict != null)
+            {
+                throw new ClientException(
+                    $"This time overlaps with an existing appointment (id {doctorConflict.Id} at {doctorConflict.ScheduledAt}) for the same doctor.");
+            }
+
+            var patientConflict = await _dbContext.Appointments.AsNoTracking().FirstOrDefaultAsync(a =>
+                a.Id != id &&
+                a.PatientId == entity.PatientId &&
+                a.Status != AppointmentStatus.Cancelled &&
+                a.ScheduledAt < newEnd &&
+                a.ScheduledAt.AddMinutes(a.DurationMinutes) > request.ScheduledAt);
+            if (patientConflict != null)
+            {
+                throw new ClientException(
+                    $"The patient already has an overlapping appointment (id {patientConflict.Id} at {patientConflict.ScheduledAt}).");
+            }
+
+            entity.DoctorId = request.DoctorId;
+            entity.DentalServiceId = request.DentalServiceId;
+            entity.ScheduledAt = request.ScheduledAt;
+            entity.DurationMinutes = dentalService.DurationMinutes;
+            entity.Price = dentalService.Price;
+
             await _dbContext.SaveChangesAsync();
 
             return _mapper.Map<AppointmentResponse>(entity);

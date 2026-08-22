@@ -31,15 +31,35 @@ class _UserListState extends State<UserList> {
     initTable();
   }
 
-  Future<void> initTable() async {
+  Future<void> _search() async {
     try {
-      var data = await _userProvider.get(filter: {});
+      setState(() => isLoading = true);
+      var data = await _userProvider.get(filter: {
+        "name": _nameController.text,
+        "username": _usernameController.text,
+        "pageSize": 200,
+      });
+      if (!mounted) return;
       setState(() {
         result = data;
         isLoading = false;
       });
     } on Exception catch (e) {
-      alertBox(context, 'Error', e.toString());
+      if (!mounted) return;
+      setState(() => isLoading = false);
+      alertBox(context, 'Greška', e.toString());
+    }
+  }
+
+  Future<void> initTable() async {
+    try {
+      var data = await _userProvider.get(filter: {"pageSize": 200});
+      setState(() {
+        result = data;
+        isLoading = false;
+      });
+    } on Exception catch (e) {
+      alertBox(context, 'Greška', e.toString());
     }
   }
 
@@ -121,10 +141,10 @@ class _UserListState extends State<UserList> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('User Management',
+                Text('Upravljanje korisnicima',
                     style: theme.textTheme.headlineSmall
                         ?.copyWith(fontWeight: FontWeight.bold)),
-                Text('Manage system users and their access',
+                Text('Upravljajte korisnicima sistema i njihovim pristupom',
                     style: theme.textTheme.bodyMedium
                         ?.copyWith(color: theme.colorScheme.outline)),
               ],
@@ -141,7 +161,7 @@ class _UserListState extends State<UserList> {
             if (refresh == "reload") initTable();
           },
           icon: const Icon(Icons.person_add_outlined),
-          label: const Text("Add User"),
+          label: const Text("Dodaj korisnika"),
         ),
       ],
     );
@@ -159,12 +179,13 @@ class _UserListState extends State<UserList> {
               child: TextField(
                 controller: _nameController,
                 decoration: InputDecoration(
-                  labelText: "Search by name",
+                  labelText: "Pretraga po imenu",
                   prefixIcon: const Icon(Icons.search),
                   border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8)),
                   isDense: true,
                 ),
+                onSubmitted: (_) => _search(),
               ),
             ),
             const SizedBox(width: 12),
@@ -172,34 +193,20 @@ class _UserListState extends State<UserList> {
               child: TextField(
                 controller: _usernameController,
                 decoration: InputDecoration(
-                  labelText: "Search by username",
+                  labelText: "Pretraga po korisničkom imenu",
                   prefixIcon: const Icon(Icons.alternate_email),
                   border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8)),
                   isDense: true,
                 ),
+                onSubmitted: (_) => _search(),
               ),
             ),
             const SizedBox(width: 12),
             ElevatedButton.icon(
-              onPressed: () async {
-                try {
-                  setState(() => isLoading = true);
-                  var data = await _userProvider.get(filter: {
-                    "name": _nameController.text,
-                    "username": _usernameController.text,
-                  });
-                  setState(() {
-                    result = data;
-                    isLoading = false;
-                  });
-                } on Exception catch (e) {
-                  setState(() => isLoading = false);
-                  alertBox(context, 'Error', e.toString());
-                }
-              },
+              onPressed: _search,
               icon: const Icon(Icons.search),
-              label: const Text("Search"),
+              label: const Text("Pretraga"),
             ),
           ],
         ),
@@ -219,7 +226,7 @@ class _UserListState extends State<UserList> {
               Icon(Icons.people_outline,
                   size: 64, color: theme.colorScheme.outline),
               const SizedBox(height: 12),
-              Text('No users found',
+              Text('Nema pronađenih korisnika',
                   style: theme.textTheme.titleMedium
                       ?.copyWith(color: theme.colorScheme.outline)),
             ],
@@ -235,6 +242,7 @@ class _UserListState extends State<UserList> {
         clipBehavior: Clip.antiAlias,
         child: SingleChildScrollView(
           child: DataTable(
+            showCheckboxColumn: false,
             headingRowColor: WidgetStateProperty.all(
                 theme.colorScheme.primaryContainer.withValues(alpha: 0.5)),
             headingTextStyle: theme.textTheme.labelLarge?.copyWith(
@@ -245,12 +253,12 @@ class _UserListState extends State<UserList> {
             dividerThickness: 0.5,
             columnSpacing: 24,
             columns: const [
-              DataColumn(label: Text("User")),
-              DataColumn(label: Text("Username")),
+              DataColumn(label: Text("Korisnik")),
+              DataColumn(label: Text("Korisničko ime")),
               DataColumn(label: Text("Email")),
-              DataColumn(label: Text("Role")),
+              DataColumn(label: Text("Rola")),
               DataColumn(label: Text("Status")),
-              DataColumn(label: Text("Actions")),
+              DataColumn(label: Text("Akcije")),
             ],
             rows: users.map((e) {
               final fullName =
@@ -311,7 +319,7 @@ class _UserListState extends State<UserList> {
                           },
                         ),
                         IconButton(
-                          tooltip: "Edit",
+                          tooltip: "Uredi",
                           icon: Icon(Icons.edit_outlined,
                               color: theme.colorScheme.primary),
                           onPressed: () async {
@@ -326,7 +334,7 @@ class _UserListState extends State<UserList> {
                           },
                         ),
                         IconButton(
-                          tooltip: "Delete",
+                          tooltip: "Obriši",
                           icon: Icon(Icons.delete_outline,
                               color: theme.colorScheme.error),
                           onPressed: () => _confirmDelete(e, theme),
@@ -382,7 +390,7 @@ class _UserListState extends State<UserList> {
           ),
           const SizedBox(width: 4),
           Text(
-            active ? 'Active' : 'Inactive',
+            active ? 'Aktivan' : 'Neaktivan',
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
@@ -406,15 +414,15 @@ class _UserListState extends State<UserList> {
             Icon(Icons.warning_amber_rounded,
                 color: theme.colorScheme.error),
             const SizedBox(width: 8),
-            const Text("Delete User"),
+            const Text("Brisanje korisnika"),
           ],
         ),
         content: Text(
-            "Are you sure you want to delete ${e.firstName ?? 'this user'}? This action cannot be undone."),
+            "Da li ste sigurni da želite obrisati korisnika ${e.firstName ?? 'ovog korisnika'}? Ova radnja se ne može poništiti."),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
+            child: const Text("Odustani"),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
@@ -425,15 +433,15 @@ class _UserListState extends State<UserList> {
                 if (!context.mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                      content: Text("User deleted successfully")),
+                      content: Text("Korisnik uspješno obrisan")),
                 );
                 Navigator.pop(context);
                 initTable();
               } on Exception catch (ex) {
-                alertBoxMoveBack(context, "Error", ex.toString());
+                alertBoxMoveBack(context, "Greška", ex.toString());
               }
             },
-            child: const Text("Delete"),
+            child: const Text("Obriši"),
           ),
         ],
       ),
