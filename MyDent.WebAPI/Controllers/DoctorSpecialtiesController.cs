@@ -34,14 +34,8 @@ public class DoctorSpecialtiesController
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Delete(int id)
     {
-        try
-        {
-            await _service.DeleteAsync(id);
-            return NoContent();
-        }
-        catch (KeyNotFoundException)
-        {
-            return NotFound();
-        }
+        // KeyNotFoundException -> 404 is now handled centrally by ExceptionFilter.
+        await _service.DeleteAsync(id);
+        return NoContent();
     }
 }

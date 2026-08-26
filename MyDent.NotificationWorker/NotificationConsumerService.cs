@@ -51,34 +51,21 @@ public class NotificationConsumerService : BackgroundService
         {
             try
             {
+                // Deserialize once, outside the retry loop below — a malformed payload fails
+                // identically every attempt, so retrying it would just burn the whole backoff
+                // cycle on a guaranteed failure.
                 var notification = JsonSerializer.Deserialize<NotificationInsertRequest>(ea.Body.Span)
                     ?? throw new InvalidOperationException("Message body deserialized to null.");
 
-                using var scope = _scopeFactory.CreateScope();
-                var dbContext = scope.ServiceProvider.GetRequiredService<MyDentDbContext>();
-
-                // Message already went through validation on the API side before being
-                // published (an internal event, not raw user input) — no need to re-run
-                // FluentValidation here, just persist it.
-                dbContext.Notifications.Add(new Notification
-                {
-                    UserId = notification.UserId,
-                    Title = notification.Title,
-                    Message = notification.Message,
-                    Type = notification.Type,
-                    AppointmentId = notification.AppointmentId,
-                    ServiceCategoryId = notification.ServiceCategoryId,
-                    CreatedAt = DateTime.UtcNow
-                });
-                await dbContext.SaveChangesAsync(stoppingToken);
+                await PersistWithRetryAsync(notification, stoppingToken);
 
                 await _channel.BasicAckAsync(ea.DeliveryTag, multiple: false, cancellationToken: stoppingToken);
             }
             catch (Exception ex)
             {
-                // Don't requeue: a message that fails to process (e.g. malformed payload) would
-                // just fail the same way forever and block every message behind it. Log and drop
-                // rather than poison-loop the queue.
+                // Don't requeue: a message that still fails after the retries below (e.g.
+                // malformed payload) would just fail the same way forever and block every
+                // message behind it. Log and drop rather than poison-loop the queue.
                 _logger.LogError(ex, "Failed to process notification message; dropping it.");
                 await _channel.BasicNackAsync(ea.DeliveryTag, multiple: false, requeue: false, cancellationToken: stoppingToken);
             }
@@ -89,6 +76,55 @@ public class NotificationConsumerService : BackgroundService
         // BasicConsumeAsync returns once the consumer is registered — keep the service alive
         // until shutdown is requested.
         await Task.Delay(Timeout.Infinite, stoppingToken).ContinueWith(_ => { }, TaskScheduler.Default);
+    }
+
+    // 1s -> 2s -> 4s -> 8s, same backoff as PasswordResetEmailConsumerService.SendWithRetryAsync
+    // — a transient DB hiccup (brief connectivity blip, deadlock) is worth retrying instead of
+    // dropping the notification on the first failure.
+    private async Task PersistWithRetryAsync(NotificationInsertRequest notification, CancellationToken cancellationToken)
+    {
+        var delay = TimeSpan.FromSeconds(1);
+        const int maxAttempts = 4;
+
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            try
+            {
+                await PersistAsync(notification, cancellationToken);
+                return;
+            }
+            catch (Exception ex) when (attempt < maxAttempts)
+            {
+                _logger.LogWarning(ex, "Failed to persist notification for user {UserId} (attempt {Attempt}/{Max}), retrying in {DelaySeconds}s.",
+                    notification.UserId, attempt, maxAttempts, delay.TotalSeconds);
+                await Task.Delay(delay, cancellationToken);
+                delay += delay;
+            }
+        }
+
+        // Final attempt — let a failure here propagate to the caller's catch block.
+        await PersistAsync(notification, cancellationToken);
+    }
+
+    private async Task PersistAsync(NotificationInsertRequest notification, CancellationToken cancellationToken)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<MyDentDbContext>();
+
+        // Message already went through validation on the API side before being published (an
+        // internal event, not raw user input) — no need to re-run FluentValidation here, just
+        // persist it.
+        dbContext.Notifications.Add(new Notification
+        {
+            UserId = notification.UserId,
+            Title = notification.Title,
+            Message = notification.Message,
+            Type = notification.Type,
+            AppointmentId = notification.AppointmentId,
+            ServiceCategoryId = notification.ServiceCategoryId,
+            CreatedAt = DateTime.UtcNow
+        });
+        await dbContext.SaveChangesAsync(cancellationToken);
     }
 
     public override async Task StopAsync(CancellationToken cancellationToken)

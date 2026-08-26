@@ -13,7 +13,13 @@ import '../utils/utils_widgets.dart';
 /// every notification used the same generic mail icon and there was no way
 /// to mark everything read at once (only per-item, on tap).
 class NotificationListScreen extends StatefulWidget {
-  const NotificationListScreen({super.key});
+  /// Bumped by `ContainerScreen` every time the Obavještenja tab is switched
+  /// to — `IndexedStack` keeps this screen's State alive across tab
+  /// switches, so without this, `_load()` only ever ran once in `initState`
+  /// (same staleness `HomeScreen` had — see its `refreshTick` doc comment).
+  final int refreshTick;
+
+  const NotificationListScreen({super.key, this.refreshTick = 0});
 
   @override
   State<NotificationListScreen> createState() =>
@@ -29,6 +35,12 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant NotificationListScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.refreshTick != oldWidget.refreshTick) _load();
   }
 
   Future<void> _load() async {
@@ -70,6 +82,8 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
         NotificationType.appointmentCancelled => (Icons.event_busy_outlined, AppColors.danger),
         NotificationType.appointmentReminder => (Icons.alarm_outlined, AppColors.primary),
         NotificationType.recurringServiceReminder => (Icons.repeat_outlined, AppColors.primary),
+        NotificationType.paymentSucceeded => (Icons.payment_outlined, AppColors.success),
+        NotificationType.paymentRefunded => (Icons.replay_outlined, AppColors.primary),
         NotificationType.general => (Icons.notifications_outlined, AppColors.primary),
       };
 

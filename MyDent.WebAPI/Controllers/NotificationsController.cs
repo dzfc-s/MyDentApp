@@ -34,14 +34,8 @@ public class NotificationsController
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<NotificationResponse>> MarkAsRead(int id)
     {
-        try
-        {
-            return await _service.MarkAsReadAsync(id);
-        }
-        catch (KeyNotFoundException)
-        {
-            return NotFound();
-        }
+        // KeyNotFoundException -> 404 is now handled centrally by ExceptionFilter.
+        return await _service.MarkAsReadAsync(id);
     }
 
     [HttpDelete("{id}")]
@@ -49,14 +43,7 @@ public class NotificationsController
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Delete(int id)
     {
-        try
-        {
-            await _service.DeleteAsync(id);
-            return NoContent();
-        }
-        catch (KeyNotFoundException)
-        {
-            return NotFound();
-        }
+        await _service.DeleteAsync(id);
+        return NoContent();
     }
 }

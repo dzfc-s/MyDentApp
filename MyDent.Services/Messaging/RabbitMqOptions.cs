@@ -9,5 +9,6 @@ namespace MyDent.Services.Messaging
         public string UserName { get; set; } = "guest";
         public string Password { get; set; } = "guest";
         public string NotificationsQueueName { get; set; } = "appointment-notifications";
+        public string PasswordResetEmailQueueName { get; set; } = "password-reset-emails";
     }
 }

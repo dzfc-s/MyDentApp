@@ -60,6 +60,10 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
   bool _isLoading = true;
   bool _saving = false;
 
+  // Editing a deactivated doctor's bio/specialties/schedule doesn't make sense until they're
+  // reactivated — the whole form is locked to just that one action first.
+  bool get _isDeactivated => widget.doctor != null && widget.doctor!.isActive == false;
+
   List<ServiceCategory> _categories = [];
   final Set<int> _selectedCategoryIds = {};
   List<DoctorSpecialty> _originalSpecialties = [];
@@ -191,49 +195,83 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ImageAssetPicker(
-            key: _imagePickerKey,
-            initialAssetId: widget.doctor?.photoAssetId,
-            assetProvider: _assetProvider,
-          ),
-          const SizedBox(height: 16.0),
-          Row(
-            children: [
-              Expanded(
-                child: FormBuilderTextField(
-                  name: 'firstName',
-                  decoration: const InputDecoration(labelText: "Ime"),
-                  validator: (v) => (v == null || v.isEmpty) ? mField : null,
-                ),
+          if (_isDeactivated) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.errorContainer,
+                borderRadius: BorderRadius.circular(8),
               ),
-              const SizedBox(width: 16.0),
-              Expanded(
-                child: FormBuilderTextField(
-                  name: 'lastName',
-                  decoration: const InputDecoration(labelText: "Prezime"),
-                  validator: (v) => (v == null || v.isEmpty) ? mField : null,
-                ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: theme.colorScheme.onErrorContainer, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      "Ovaj doktor je deaktiviran. Reaktivirajte ga da biste mogli uređivati podatke, raspored ili odsustva.",
+                      style: TextStyle(color: theme.colorScheme.onErrorContainer),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
+            const SizedBox(height: 16.0),
+          ],
+          IgnorePointer(
+            ignoring: _isDeactivated,
+            child: Opacity(
+              opacity: _isDeactivated ? 0.5 : 1,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ImageAssetPicker(
+                    key: _imagePickerKey,
+                    initialAssetId: widget.doctor?.photoAssetId,
+                    assetProvider: _assetProvider,
+                  ),
+                  const SizedBox(height: 16.0),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FormBuilderTextField(
+                          name: 'firstName',
+                          decoration: const InputDecoration(labelText: "Ime"),
+                          validator: (v) => (v == null || v.isEmpty) ? mField : null,
+                        ),
+                      ),
+                      const SizedBox(width: 16.0),
+                      Expanded(
+                        child: FormBuilderTextField(
+                          name: 'lastName',
+                          decoration: const InputDecoration(labelText: "Prezime"),
+                          validator: (v) => (v == null || v.isEmpty) ? mField : null,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16.0),
+                  FormBuilderTextField(
+                    name: 'bio',
+                    decoration: const InputDecoration(labelText: "Biografija"),
+                    maxLines: 4,
+                  ),
+                  const SizedBox(height: 24.0),
+                  const Divider(),
+                  const SizedBox(height: 8.0),
+                  _buildSpecialtiesSection(theme),
+                  const SizedBox(height: 24.0),
+                  const Divider(),
+                  const SizedBox(height: 8.0),
+                  _buildWorkingHoursSection(theme),
+                ],
+              ),
+            ),
           ),
-          const SizedBox(height: 16.0),
-          FormBuilderTextField(
-            name: 'bio',
-            decoration: const InputDecoration(labelText: "Biografija"),
-            maxLines: 4,
-          ),
-          if (widget.doctor != null) ...[
+          if (widget.doctor != null && !_isDeactivated) ...[
             const SizedBox(height: 8.0),
             FormBuilderCheckbox(name: 'isActive', title: const Text("Aktivan")),
           ],
-          const SizedBox(height: 24.0),
-          const Divider(),
-          const SizedBox(height: 8.0),
-          _buildSpecialtiesSection(theme),
-          const SizedBox(height: 24.0),
-          const Divider(),
-          const SizedBox(height: 8.0),
-          _buildWorkingHoursSection(theme),
         ],
       ),
     );
@@ -378,16 +416,37 @@ class _DoctorDetailsScreenState extends State<DoctorDetailsScreen> {
         ),
         const SizedBox(width: 16.0),
         ElevatedButton(
-          onPressed: _saving ? null : _save,
+          onPressed: _saving ? null : (_isDeactivated ? _reactivate : _save),
           child: _saving
               ? const SizedBox(
                   width: 18,
                   height: 18,
                   child: CircularProgressIndicator(strokeWidth: 2))
-              : const Text("Sačuvaj"),
+              : Text(_isDeactivated ? "Reaktiviraj" : "Sačuvaj"),
         ),
       ],
     );
+  }
+
+  Future<void> _reactivate() async {
+    setState(() => _saving = true);
+    try {
+      // DoctorUpdateRequest requires FirstName/LastName — the form fields are locked while
+      // deactivated, so send the doctor's existing values back rather than an empty diff.
+      await _provider.update(widget.doctor!.id!, {
+        "firstName": widget.doctor!.firstName,
+        "lastName": widget.doctor!.lastName,
+        "bio": widget.doctor!.bio,
+        "photoAssetId": widget.doctor!.photoAssetId,
+        "isActive": true,
+      });
+      if (!mounted) return;
+      Navigator.of(context).pop("reload");
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      alertBox(context, "Greška", "Greška prilikom reaktivacije: $e");
+    }
   }
 
   Future _save() async {

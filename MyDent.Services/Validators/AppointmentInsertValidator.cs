@@ -3,6 +3,7 @@ using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using MyDent.Model.Enums;
 using MyDent.Model.Requests;
+using MyDent.Services;
 using MyDent.Services.Database;
 
 namespace MyDent.Services.Validators
@@ -36,7 +37,7 @@ namespace MyDent.Services.Validators
                 .WithMessage(x => $"DentalService with id {x.DentalServiceId} is not active.");
 
             RuleFor(x => x.ScheduledAt)
-                .GreaterThan(_ => DateTime.UtcNow)
+                .GreaterThan(_ => ClinicClock.Now)
                 .WithMessage("ScheduledAt must be in the future.");
 
             // Availability checks (working hours / absence / overlap) only make sense once the

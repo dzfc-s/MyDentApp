@@ -11,6 +11,7 @@ using MyDent.Model.Requests;
 using MyDent.Model.Responses;
 using MyDent.Model.SearchObjects;
 using MyDent.Services.Database;
+using MyDent.Services.Messaging;
 
 namespace MyDent.Services
 {
@@ -20,16 +21,19 @@ namespace MyDent.Services
     {
         private readonly IValidator<PaymentCreateIntentRequest> _createValidator;
         private readonly IAuthenticatedUserAccessor _userAccessor;
+        private readonly IAppointmentEventPublisher _eventPublisher;
 
         public PaymentService(
             MyDentDbContext dbContext,
             MapsterMapper.IMapper mapper,
             IValidator<PaymentCreateIntentRequest> createValidator,
-            IAuthenticatedUserAccessor userAccessor)
+            IAuthenticatedUserAccessor userAccessor,
+            IAppointmentEventPublisher eventPublisher)
             : base(mapper, dbContext)
         {
             _createValidator = createValidator;
             _userAccessor = userAccessor;
+            _eventPublisher = eventPublisher;
         }
 
         protected override Task<IQueryable<Payment>> IncludeRelatedEntitiesAsync(PaymentSearch? search, IQueryable<Payment> query = null!)
@@ -62,6 +66,16 @@ namespace MyDent.Services
                 if (search.Status.HasValue)
                 {
                     query = query.Where(p => p.Status == search.Status.Value);
+                }
+
+                if (search.DateFrom.HasValue)
+                {
+                    query = query.Where(p => p.CreatedAt >= search.DateFrom.Value);
+                }
+
+                if (search.DateTo.HasValue)
+                {
+                    query = query.Where(p => p.CreatedAt <= search.DateTo.Value);
                 }
             }
 
@@ -176,17 +190,31 @@ namespace MyDent.Services
             var paymentIntentService = new Stripe.PaymentIntentService();
             var intent = await paymentIntentService.GetAsync(entity.ProviderTransactionId);
 
-            if (intent.Status == "succeeded")
+            await ApplyStripeStatusAsync(entity, intent.Status);
+
+            return _mapper.Map<PaymentResponse>(entity);
+        }
+
+        // Shared by ConfirmAsync (client-triggered, re-fetches from Stripe) and the webhook
+        // handler below (Stripe-triggered, status comes from the signed event payload itself).
+        private async Task ApplyStripeStatusAsync(Payment entity, string stripeStatus)
+        {
+            var justPaid = false;
+
+            if (stripeStatus == "succeeded")
             {
-                // Idempotent: a repeat /confirm call on an already-Paid payment must not shift
-                // PaidAt forward every time it's called.
+                // Idempotent: a repeat call on an already-Paid payment must not shift PaidAt
+                // forward every time it's called — both ConfirmAsync and the webhook can observe
+                // the same "succeeded" transition. Also guards the notification below from firing
+                // twice for the same payment (once from ConfirmAsync, once from the webhook).
                 if (entity.Status != PaymentStatus.Paid)
                 {
                     entity.Status = PaymentStatus.Paid;
                     entity.PaidAt = DateTime.UtcNow;
+                    justPaid = true;
                 }
             }
-            else if (intent.Status == "canceled")
+            else if (stripeStatus == "canceled")
             {
                 entity.Status = PaymentStatus.Failed;
             }
@@ -195,12 +223,97 @@ namespace MyDent.Services
 
             await _dbContext.SaveChangesAsync();
 
+            if (justPaid)
+            {
+                await _eventPublisher.PublishNotificationAsync(new NotificationInsertRequest
+                {
+                    UserId = entity.Appointment.PatientId,
+                    Title = "Uplata primljena",
+                    Message = $"Uspješno ste platili {entity.Amount} KM za termin zakazan za " +
+                        $"{entity.Appointment.ScheduledAt:dd.MM.yyyy. 'u' HH:mm}.",
+                    Type = NotificationType.PaymentSucceeded,
+                    AppointmentId = entity.AppointmentId
+                });
+            }
+        }
+
+        // Stripe calls this directly (no user session) whenever a PaymentIntent's status changes —
+        // covers the case ConfirmAsync's client-triggered call can miss entirely, e.g. the app
+        // being closed right after presentPaymentSheet() succeeds but before the eager confirm()
+        // call fires. The signature check IS the authorization here: it cryptographically proves
+        // the payload actually came from Stripe, so nothing else needs to re-verify it.
+        public async Task HandleWebhookAsync(string json, string stripeSignatureHeader, string webhookSecret)
+        {
+            if (string.IsNullOrEmpty(webhookSecret))
+            {
+                throw new ClientException("Stripe webhook is not configured.");
+            }
+
+            // Throws Stripe.StripeException on a bad/missing signature — the controller lets that
+            // become a 400, same as any other invalid request, rather than silently trusting an
+            // unverified payload.
+            var stripeEvent = Stripe.EventUtility.ConstructEvent(json, stripeSignatureHeader, webhookSecret);
+
+            if (stripeEvent.Data.Object is not Stripe.PaymentIntent intent)
+            {
+                return;
+            }
+
+            var entity = await _dbContext.Payments.Include(p => p.Appointment)
+                .FirstOrDefaultAsync(p => p.ProviderTransactionId == intent.Id);
+            if (entity == null)
+            {
+                // A PaymentIntent this app didn't create (or one whose local row was never
+                // persisted) — nothing to update.
+                return;
+            }
+
+            await ApplyStripeStatusAsync(entity, intent.Status);
+        }
+
+        // Called when the patient backs out of the PaymentSheet instead of completing it — without
+        // this, the Payment row created by CreateIntentAsync stays Pending forever (Stripe's
+        // PaymentIntent never resolves on its own until it auto-expires after 24h), which both
+        // looks like an unresolved payment sitting in the Payments list and blocks retrying (see
+        // PaymentCreateIntentValidator, which refuses a second intent while one already exists).
+        public async Task<PaymentResponse> CancelAsync(int id)
+        {
+            var entity = await _dbContext.Payments.Include(p => p.Appointment)
+                .FirstOrDefaultAsync(p => p.Id == id)
+                ?? throw new KeyNotFoundException($"Payment with id {id} not found.");
+
+            if (!_userAccessor.IsInRole("Admin") && entity.Appointment.PatientId != _userAccessor.GetUserId())
+            {
+                throw new ClientException("You can only cancel your own payments.");
+            }
+
+            if (entity.Status != PaymentStatus.Pending)
+            {
+                throw new ClientException($"Cannot cancel a payment with status {entity.Status}. Only Pending payments can be cancelled.");
+            }
+
+            try
+            {
+                var paymentIntentService = new Stripe.PaymentIntentService();
+                await paymentIntentService.CancelAsync(entity.ProviderTransactionId);
+            }
+            catch (Stripe.StripeException)
+            {
+                // Already succeeded/canceled on Stripe's side, or never had a payment method
+                // attached — either way there's nothing left to cancel there. The local status
+                // below is what actually matters for the app.
+            }
+
+            entity.Status = PaymentStatus.Failed;
+            await _dbContext.SaveChangesAsync();
+
             return _mapper.Map<PaymentResponse>(entity);
         }
 
         public async Task<PaymentResponse> RefundAsync(int id)
         {
-            var entity = await _dbContext.Payments.FindAsync(id)
+            var entity = await _dbContext.Payments.Include(p => p.Appointment)
+                .FirstOrDefaultAsync(p => p.Id == id)
                 ?? throw new KeyNotFoundException($"Payment with id {id} not found.");
 
             if (entity.Status != PaymentStatus.Paid)
@@ -219,6 +332,16 @@ namespace MyDent.Services
             entity.RefundedAt = DateTime.UtcNow;
 
             await _dbContext.SaveChangesAsync();
+
+            await _eventPublisher.PublishNotificationAsync(new NotificationInsertRequest
+            {
+                UserId = entity.Appointment.PatientId,
+                Title = "Uplata vraćena",
+                Message = $"Vraćen vam je iznos od {entity.RefundedAmount} KM za termin zakazan za " +
+                    $"{entity.Appointment.ScheduledAt:dd.MM.yyyy. 'u' HH:mm}.",
+                Type = NotificationType.PaymentRefunded,
+                AppointmentId = entity.AppointmentId
+            });
 
             return _mapper.Map<PaymentResponse>(entity);
         }

@@ -16,6 +16,11 @@ namespace MyDent.Services.Validators
                 .GreaterThan(0).WithMessage("ProfileImageAssetId must be greater than 0.")
                 .When(x => x.ProfileImageAssetId.HasValue);
 
+            RuleFor(x => x.PhoneNumber)
+                .MaximumLength(20).WithMessage("Phone number cannot exceed 20 characters.")
+                .Matches(@"^\+?[0-9\s\-()]{6,20}$").WithMessage("Phone number format is invalid.")
+                .When(x => !string.IsNullOrEmpty(x.PhoneNumber));
+
             RuleFor(x => x.Allergies)
                 .MaximumLength(500).WithMessage("Allergies cannot exceed 500 characters.");
 

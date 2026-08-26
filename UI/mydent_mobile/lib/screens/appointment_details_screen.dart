@@ -159,11 +159,17 @@ class _AppointmentDetailsScreenState extends State<AppointmentDetailsScreen> {
                       ),
                     ],
                   ),
+                  // Only the "we'll let you know" framing makes sense when someone/something
+                  // else did the cancelling (Admin, or the automatic doctor/service-deactivation
+                  // cascade) — if the patient cancelled their own appointment, there's nothing
+                  // to wait on, so a plain confirmation is clearer.
                   const SizedBox(height: 8),
-                  const Text(
-                    "Pratite novosti u aplikaciji — obavijestit ćemo Vas kada doktor "
-                    "bude ponovo dostupan za rezervacije.",
-                    style: TextStyle(color: AppColors.danger, fontSize: 12.5, height: 1.4),
+                  Text(
+                    a.cancelledByUserId == a.patientId
+                        ? "Termin je uspješno otkazan."
+                        : "Pratite novosti u aplikaciji — obavijestit ćemo Vas kada doktor "
+                            "bude ponovo dostupan za rezervacije.",
+                    style: const TextStyle(color: AppColors.danger, fontSize: 12.5, height: 1.4),
                   ),
                 ],
               ),
@@ -194,7 +200,7 @@ class _AppointmentDetailsScreenState extends State<AppointmentDetailsScreen> {
             const SizedBox(height: 8),
           ],
           if (PaymentStatusX.fromInt(_payment?.status) != PaymentStatus.paid &&
-              status != AppointmentStatus.cancelled) ...[
+              status == AppointmentStatus.confirmed) ...[
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(

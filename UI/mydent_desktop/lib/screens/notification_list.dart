@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -23,6 +25,7 @@ class _NotificationListState extends State<NotificationList> {
   SearchResult<AppNotification>? result;
   SearchResult<User>? users;
   bool isLoading = true;
+  Timer? _pollTimer;
 
   @override
   void initState() {
@@ -30,6 +33,18 @@ class _NotificationListState extends State<NotificationList> {
     _provider = context.read<NotificationProvider>();
     _userProvider = context.read<UserProvider>();
     initTable();
+
+    // Manual-refresh-only isn't acceptable for notifications — poll in the background so an
+    // admin sees a new one land without having to leave and re-enter this screen.
+    _pollTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+      if (mounted) initTable();
+    });
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> initTable() async {
@@ -48,12 +63,13 @@ class _NotificationListState extends State<NotificationList> {
         return bCreated.compareTo(aCreated);
       });
       data.items = items;
+      if (!mounted) return;
       setState(() {
         result = data;
         isLoading = false;
       });
     } on Exception catch (e) {
-      alertBox(context, 'Greška', e.toString());
+      if (mounted) alertBox(context, 'Greška', e.toString());
     }
   }
 

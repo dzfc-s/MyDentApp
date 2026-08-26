@@ -35,14 +35,8 @@ public class NewsController
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<NewsResponse>> Update(int id, [FromBody] NewsUpdateRequest request)
     {
-        try
-        {
-            return await _service.UpdateAsync(id, request);
-        }
-        catch (KeyNotFoundException)
-        {
-            return NotFound();
-        }
+        // KeyNotFoundException -> 404 is now handled centrally by ExceptionFilter.
+        return await _service.UpdateAsync(id, request);
     }
 
     [HttpDelete("{id}")]
@@ -51,14 +45,7 @@ public class NewsController
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Delete(int id)
     {
-        try
-        {
-            await _service.DeleteAsync(id);
-            return NoContent();
-        }
-        catch (KeyNotFoundException)
-        {
-            return NotFound();
-        }
+        await _service.DeleteAsync(id);
+        return NoContent();
     }
 }

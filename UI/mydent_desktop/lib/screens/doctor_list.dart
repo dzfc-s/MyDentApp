@@ -423,7 +423,9 @@ class _DoctorCard extends StatelessWidget {
                             SizedBox(
                               width: double.infinity,
                               child: OutlinedButton.icon(
-                                onPressed: onSchedule,
+                                // A deactivated doctor shouldn't get a new schedule or absence —
+                                // reactivate them first (via the edit screen) before either makes sense.
+                                onPressed: active ? onSchedule : null,
                                 style: OutlinedButton.styleFrom(
                                   visualDensity: VisualDensity.compact,
                                   padding: const EdgeInsets.symmetric(horizontal: 6),
@@ -436,7 +438,7 @@ class _DoctorCard extends StatelessWidget {
                             SizedBox(
                               width: double.infinity,
                               child: OutlinedButton.icon(
-                                onPressed: onAbsences,
+                                onPressed: active ? onAbsences : null,
                                 style: OutlinedButton.styleFrom(
                                   visualDensity: VisualDensity.compact,
                                   padding: const EdgeInsets.symmetric(horizontal: 6),

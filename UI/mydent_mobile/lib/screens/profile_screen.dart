@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../main.dart' hide alertBox;
+import '../main.dart';
 import '../models/asset.dart';
 import '../models/user.dart';
 import '../providers/asset_provider.dart';

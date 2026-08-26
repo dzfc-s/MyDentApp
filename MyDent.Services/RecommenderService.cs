@@ -43,10 +43,23 @@ namespace MyDent.Services
                 .Where(a => a.PatientId == targetPatientId && a.Status == AppointmentStatus.Completed)
                 .ToListAsync();
 
+            // Already on the calendar (booked but not yet attended) — recommending these again
+            // reads as "did this not register?" even though it's really just that only Completed
+            // visits feed the content/time-based legs below. A Pending/Confirmed appointment
+            // doesn't resolve a time-based recall on its own (the patient hasn't actually been
+            // seen yet — that only happens once it's marked Completed and the recall clock
+            // restarts from that visit), but it should still stop the service being *suggested*
+            // again in the meantime.
+            var alreadyBookedServiceIds = await _dbContext.Appointments
+                .Where(a => a.PatientId == targetPatientId
+                    && (a.Status == AppointmentStatus.Pending || a.Status == AppointmentStatus.Confirmed))
+                .Select(a => a.DentalServiceId)
+                .ToListAsync();
+
             if (completedAppointments.Count == 0)
             {
                 // New patient, nothing to base content/time recommendations on.
-                return await GetPopularServicesAsync(excludeServiceIds: new HashSet<int>());
+                return await GetPopularServicesAsync(excludeServiceIds: alreadyBookedServiceIds.ToHashSet());
             }
 
             var visitedServiceIds = completedAppointments.Select(a => a.DentalServiceId).ToHashSet();
@@ -64,6 +77,7 @@ namespace MyDent.Services
             }
 
             return recommendations
+                .Where(r => !alreadyBookedServiceIds.Contains(r.DentalServiceId))
                 .GroupBy(r => r.DentalServiceId)
                 .Select(g => g.First())
                 .Take(MaxRecommendations)

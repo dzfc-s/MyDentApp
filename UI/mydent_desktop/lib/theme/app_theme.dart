@@ -20,6 +20,16 @@ class AppColors {
   static const dangerContainer = Color(0xFFFEE2E2);
 }
 
+/// Which physical clinic this admin panel manages — shown in the sidebar so
+/// it's never ambiguous, matching the same constants already shown to
+/// patients on the mobile app (see mydent_mobile's ClinicInfo).
+class ClinicInfo {
+  ClinicInfo._();
+
+  static const name = 'Stom. ordinacija Dr. Pinjić';
+  static const address = 'Kardinala Stepinca 12, Mostar';
+}
+
 ThemeData buildAppTheme() {
   final colorScheme = ColorScheme.fromSeed(
     seedColor: AppColors.primary,

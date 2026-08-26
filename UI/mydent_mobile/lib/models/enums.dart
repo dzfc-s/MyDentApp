@@ -34,6 +34,9 @@ enum NotificationType {
   appointmentCancelled,
   appointmentReminder,
   recurringServiceReminder,
+  // Order must match MyDent.Model.Enums.NotificationType exactly (int-mapped) — append only.
+  paymentSucceeded,
+  paymentRefunded,
 }
 
 extension NotificationTypeX on NotificationType {

@@ -38,13 +38,14 @@ class _DoctorAbsenceListState extends State<DoctorAbsenceList> {
         _provider.get(filter: {"pageSize": 200}),
         _doctorProvider.get(filter: {"pageSize": 200}),
       ]);
+      if (!mounted) return;
       setState(() {
         result = results[0] as SearchResult<DoctorAbsence>;
         doctors = results[1] as SearchResult<Doctor>;
         isLoading = false;
       });
     } on Exception catch (e) {
-      alertBox(context, 'Greška', e.toString());
+      if (mounted) alertBox(context, 'Greška', e.toString());
     }
   }
 

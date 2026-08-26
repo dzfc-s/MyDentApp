@@ -29,12 +29,27 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 
+builder.Services.AddMemoryCache();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<IAuthenticatedUserAccessor, HttpAuthenticatedUserAccessor>();
 
 builder.Services.AddControllers(
    options => options.Filters.Add<ExceptionFilter>()
 );
+
+// Both clients are native apps (Flutter Windows/Android), not browser-based, so CORS never
+// actually gates a real request here — this exists so Swagger/Scalar (served from the API's own
+// origin, still same-origin) and any future browser-based tool against this API have an explicit,
+// single, named policy rather than none at all or an implicit AllowAnyOrigin.
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("MyDentCors", policy =>
+    {
+        policy.WithOrigins("http://localhost:5126", "http://127.0.0.1:5126")
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
 
 // Add Entity Framework Core DbContext
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
@@ -58,10 +73,12 @@ var rabbitMqOptions = new RabbitMqOptions
     Port = int.Parse(builder.Configuration["RabbitMQ:Port"] ?? "5672"),
     UserName = builder.Configuration["RabbitMQ:UserName"] ?? "guest",
     Password = builder.Configuration["RabbitMQ:Password"] ?? "guest",
-    NotificationsQueueName = builder.Configuration["RabbitMQ:NotificationsQueueName"] ?? "appointment-notifications"
+    NotificationsQueueName = builder.Configuration["RabbitMQ:NotificationsQueueName"] ?? "appointment-notifications",
+    PasswordResetEmailQueueName = builder.Configuration["RabbitMQ:PasswordResetEmailQueueName"] ?? "password-reset-emails"
 };
 builder.Services.AddSingleton(rabbitMqOptions);
 builder.Services.AddSingleton<IAppointmentEventPublisher, RabbitMqAppointmentEventPublisher>();
+builder.Services.AddSingleton<IEmailEventPublisher, RabbitMqEmailEventPublisher>();
 
 // register Mapster for object mapping
 builder.Services.AddMapster();
@@ -165,6 +182,9 @@ builder.Services.AddScoped<IValidator<NotificationInsertRequest>, NotificationIn
 builder.Services.AddScoped<IValidator<NewsInsertRequest>, NewsInsertValidator>();
 builder.Services.AddScoped<IValidator<NewsUpdateRequest>, NewsUpdateValidator>();
 builder.Services.AddScoped<IValidator<PaymentCreateIntentRequest>, PaymentCreateIntentValidator>();
+builder.Services.AddScoped<IValidator<ForgotPasswordRequest>, ForgotPasswordValidator>();
+builder.Services.AddScoped<IValidator<ResetPasswordRequest>, ResetPasswordValidator>();
+builder.Services.AddScoped<IValidator<UserPasswordChangeRequest>, UserPasswordChangeValidator>();
 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
@@ -270,17 +290,20 @@ using (var scope = app.Services.CreateScope())
 }
 
 // Configure the HTTP request pipeline.
-//if (app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
     app.MapScalarApiReference();
-
 
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-//app.UseHttpsRedirection();
+// Deliberately no UseHttpsRedirection() — the API runs plain HTTP (see docker-compose.yml),
+// which avoids self-signed cert expiry issues for local/grading runs; both Flutter clients
+// point at http:// directly.
+
+app.UseCors("MyDentCors");
 
 app.UseAuthentication();
 

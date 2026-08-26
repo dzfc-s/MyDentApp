@@ -15,7 +15,15 @@ import 'dental_service_details_screen.dart';
 /// whatever filter was active there; this gives patients a place to browse
 /// the whole catalog without the rest of Home's content around it.
 class ServiceBrowseScreen extends StatefulWidget {
-  const ServiceBrowseScreen({super.key});
+  /// Pre-fills the search box when opened from Home's hero search — that
+  /// search used to just re-filter Home's own small inline preview, which
+  /// was confusing (a search box at the top of the screen visibly affecting
+  /// a section several scrolls down, competing with the category chips and
+  /// "Prikaži sve" link for the same job). Now Home's search box is purely an
+  /// entry point into this dedicated browse screen instead.
+  final String? initialQuery;
+
+  const ServiceBrowseScreen({super.key, this.initialQuery});
 
   @override
   State<ServiceBrowseScreen> createState() => _ServiceBrowseScreenState();
@@ -30,7 +38,8 @@ class _ServiceBrowseScreenState extends State<ServiceBrowseScreen> {
   int? _selectedCategoryId;
   bool isLoading = true;
 
-  final TextEditingController _searchController = TextEditingController();
+  late final TextEditingController _searchController =
+      TextEditingController(text: widget.initialQuery ?? '');
 
   @override
   void initState() {

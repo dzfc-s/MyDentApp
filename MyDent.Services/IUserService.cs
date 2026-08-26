@@ -10,5 +10,7 @@ namespace MyDent.Services
         Task<UserSensitveResponse?> GetByUsernameAsync(string username);
         Task<UserResponse?> GetWithRoleByIdAsync(int id);
         Task ChangePasswordAsync(UserPasswordChangeRequest request);
+        Task ForgotPasswordAsync(ForgotPasswordRequest request);
+        Task ResetPasswordAsync(ResetPasswordRequest request);
     }
 }

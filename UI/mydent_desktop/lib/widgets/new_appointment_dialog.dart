@@ -153,11 +153,14 @@ class _NewAppointmentDialogState extends State<NewAppointmentDialog> {
   }
 
   Future<void> _save() async {
-    if (_patient?.id == null ||
-        _doctorId == null ||
-        _serviceId == null ||
-        _selectedSlot?.startTime == null) {
-      alertBox(context, 'Greška', 'Odaberite pacijenta, doktora, uslugu i termin.');
+    final missing = [
+      if (_patient?.id == null) 'pacijenta',
+      if (_serviceId == null) 'uslugu',
+      if (_doctorId == null) 'doktora',
+      if (_selectedSlot?.startTime == null) 'termin',
+    ];
+    if (missing.isNotEmpty) {
+      alertBox(context, 'Nedostaju podaci', 'Odaberite: ${missing.join(', ')}.');
       return;
     }
     setState(() => _saving = true);

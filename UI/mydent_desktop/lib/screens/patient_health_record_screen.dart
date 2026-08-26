@@ -83,7 +83,7 @@ class _PatientHealthRecordScreenState
 
     return MasterScreen(
       title: "Zdravstveni karton",
-      currentSection: AppSection.users,
+      currentSection: AppSection.patients,
       child: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(32.0),

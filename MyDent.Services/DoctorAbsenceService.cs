@@ -84,6 +84,18 @@ namespace MyDent.Services
                 {
                     query = query.Where(a => a.DoctorId == search.DoctorId.Value);
                 }
+
+                // Standard interval-overlap test: an absence overlaps the requested window
+                // unless it ends before the window starts or starts after the window ends.
+                if (search.DateFrom.HasValue)
+                {
+                    query = query.Where(a => a.EndDate >= search.DateFrom.Value);
+                }
+
+                if (search.DateTo.HasValue)
+                {
+                    query = query.Where(a => a.StartDate <= search.DateTo.Value);
+                }
             }
 
             return query;

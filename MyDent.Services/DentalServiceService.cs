@@ -15,24 +15,45 @@ namespace MyDent.Services
           IDentalServiceService
     {
         private readonly IAppointmentService _appointmentService;
+        private readonly IAuthenticatedUserAccessor _userAccessor;
 
         public DentalServiceService(
             MyDentDbContext dbContext,
             MapsterMapper.IMapper mapper,
             FluentValidation.IValidator<DentalServiceInsertRequest> insertValidator,
             FluentValidation.IValidator<DentalServiceUpdateRequest> updateValidator,
-            IAppointmentService appointmentService)
+            IAppointmentService appointmentService,
+            IAuthenticatedUserAccessor userAccessor)
             : base(dbContext, mapper, insertValidator, updateValidator)
         {
             _appointmentService = appointmentService;
+            _userAccessor = userAccessor;
+        }
+
+        // GetByIdAsync in the base class looks up by id only, with no ApplyFilters pass — so
+        // without this, a patient who knows/guesses an inactive service's id could still fetch
+        // (and book) a service that's no longer offered, since the "hide inactive" rule below
+        // only applies to list search.
+        public override async Task<DentalServiceResponse> GetByIdAsync(int id)
+        {
+            var response = await base.GetByIdAsync(id);
+            if (!response.IsActive && !_userAccessor.IsInRole("Admin"))
+            {
+                throw new KeyNotFoundException($"DentalService with id {id} not found.");
+            }
+            return response;
         }
 
         // Same reasoning as DoctorService.DeleteAsync — deactivating a service shouldn't leave a
         // future appointment booked for something that's no longer offered.
         public override async Task DeleteAsync(int id)
         {
+            // Same reasoning as DoctorService.DeleteAsync: cancelling the affected appointments
+            // and deactivating the service must land together, not partially.
+            await using var transaction = await _dbContext.Database.BeginTransactionAsync();
             await CancelFutureAppointmentsAsync(id);
             await base.DeleteAsync(id);
+            await transaction.CommitAsync();
         }
 
         // DeleteAsync (soft-delete via the "Obriši" action) already cancelled future appointments,
@@ -92,6 +113,14 @@ namespace MyDent.Services
                 {
                     query = query.Where(s => s.IsActive == search.IsActive.Value);
                 }
+            }
+
+            // Only Admin/Staff should ever see inactive/archived services in the public catalog —
+            // a patient omitting IsActive (or explicitly passing IsActive=false) must not be able
+            // to browse or book against a service that's no longer offered.
+            if (!_userAccessor.IsInRole("Admin"))
+            {
+                query = query.Where(s => s.IsActive);
             }
 
             return query;

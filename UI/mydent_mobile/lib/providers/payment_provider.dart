@@ -30,6 +30,13 @@ class PaymentProvider extends BaseProvider<Payment> {
     return fromJson(jsonDecode(response.body));
   }
 
+  Future<Payment> cancel(int id) async {
+    final uri = Uri.parse("$baseUrl$endpoint/$id/cancel");
+    final response = await http.post(uri, headers: createHeaders());
+    validateResponse(response);
+    return fromJson(jsonDecode(response.body));
+  }
+
   // Admin-only server-side (see PaymentsController.Refund) — a non-Admin caller gets 403.
   Future<Payment> refund(int id) async {
     final uri = Uri.parse("$baseUrl$endpoint/$id/refund");

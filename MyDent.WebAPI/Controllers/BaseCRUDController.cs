@@ -38,15 +38,9 @@ public abstract class BaseCRUDController<TResponse, TSearch, TInsertRequest, TUp
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public virtual async Task<ActionResult<TResponse>> Update(int id, [FromBody] TUpdateRequest request)
     {
-        try
-        {
-            var result = await _service.UpdateAsync(id, request);
-            return result;
-        }
-        catch (KeyNotFoundException)
-        {
-            return NotFound();
-        }
+        // KeyNotFoundException -> 404 is now handled centrally by ExceptionFilter.
+        var result = await _service.UpdateAsync(id, request);
+        return result;
     }
 
     [HttpDelete("{id}")]
@@ -54,14 +48,7 @@ public abstract class BaseCRUDController<TResponse, TSearch, TInsertRequest, TUp
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public virtual async Task<IActionResult> Delete(int id)
     {
-        try
-        {
-            await _service.DeleteAsync(id);
-            return NoContent();
-        }
-        catch (KeyNotFoundException)
-        {
-            return NotFound();
-        }
+        await _service.DeleteAsync(id);
+        return NoContent();
     }
 }

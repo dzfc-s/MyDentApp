@@ -97,12 +97,13 @@ class _AppointmentListState extends State<AppointmentList> {
         "includeTotalCount": true,
         if (_statusFilter != null) "status": _statusFilter!.index,
       });
+      if (!mounted) return;
       setState(() {
         result = data;
         isLoading = false;
       });
     } on Exception catch (e) {
-      alertBox(context, 'Greška', e.toString());
+      if (mounted) alertBox(context, 'Greška', e.toString());
     }
   }
 

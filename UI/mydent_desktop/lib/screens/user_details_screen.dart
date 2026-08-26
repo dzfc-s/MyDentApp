@@ -45,7 +45,7 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
 
     return MasterScreen(
       title: _isEditing ? 'Uredi korisnika' : 'Novi korisnik',
-      currentSection: AppSection.users,
+      currentSection: AppSection.patients,
       child: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(32.0),
@@ -165,6 +165,8 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
                   child: FormBuilderTextField(
                     name: 'firstName',
                     decoration: _inputDecoration('Ime', Icons.person_outline),
+                    validator: (v) =>
+                        (v == null || v.trim().isEmpty) ? "Obavezno polje" : null,
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -172,6 +174,8 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
                   child: FormBuilderTextField(
                     name: 'lastName',
                     decoration: _inputDecoration('Prezime', Icons.person_outline),
+                    validator: (v) =>
+                        (v == null || v.trim().isEmpty) ? "Obavezno polje" : null,
                   ),
                 ),
               ],
@@ -181,6 +185,13 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
               name: 'phoneNumber',
               decoration: _inputDecoration('Broj telefona', Icons.phone_outlined),
               keyboardType: TextInputType.phone,
+              validator: (v) {
+                if (v == null || v.trim().isEmpty) return null;
+                if (!RegExp(r'^\+?[0-9\s\-()]{6,20}$').hasMatch(v.trim())) {
+                  return "Neispravan format telefona";
+                }
+                return null;
+              },
             ),
           ],
         ),
@@ -202,6 +213,11 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
                   name: 'username',
                   decoration:
                       _inputDecoration('Korisničko ime', Icons.alternate_email),
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) return "Obavezno polje";
+                    if (v.trim().length < 3) return "Minimalno 3 karaktera";
+                    return null;
+                  },
                 ),
               ),
               const SizedBox(width: 16),
@@ -210,6 +226,13 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
                   name: 'email',
                   decoration: _inputDecoration('Email', Icons.email_outlined),
                   keyboardType: TextInputType.emailAddress,
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) return "Obavezno polje";
+                    if (!RegExp(r"^[^@\s]+@[^@\s]+\.[^@\s]+$").hasMatch(v.trim())) {
+                      return "Neispravan email";
+                    }
+                    return null;
+                  },
                 ),
               ),
             ],
@@ -220,6 +243,11 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
               name: 'password',
               decoration: _inputDecoration('Lozinka', Icons.lock_outline),
               obscureText: true,
+              validator: (v) {
+                if (v == null || v.isEmpty) return "Obavezno polje";
+                if (v.length < 6) return "Minimalno 6 karaktera";
+                return null;
+              },
             ),
           ],
         ],

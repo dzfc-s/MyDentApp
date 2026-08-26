@@ -42,3 +42,9 @@ android {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // Required by flutter_stripe on Android — its native SDK needs a
+    // Theme.MaterialComponents-derived activity theme to initialise.
+    implementation("com.google.android.material:material:1.12.0")
+}

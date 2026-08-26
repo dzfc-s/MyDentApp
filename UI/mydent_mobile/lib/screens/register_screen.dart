@@ -72,6 +72,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 name: 'phoneNumber',
                 decoration: const InputDecoration(labelText: "Telefon"),
                 keyboardType: TextInputType.phone,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return null;
+                  if (!RegExp(r'^\+?[0-9\s\-()]{6,20}$').hasMatch(v.trim())) {
+                    return "Neispravan format telefona";
+                  }
+                  return null;
+                },
               ),
               const SizedBox(height: 16),
               FormBuilderTextField(

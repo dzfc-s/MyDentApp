@@ -34,6 +34,8 @@ enum NotificationType {
   appointmentCancelled,
   appointmentReminder,
   recurringServiceReminder,
+  paymentSucceeded,
+  paymentRefunded,
 }
 
 extension NotificationTypeX on NotificationType {

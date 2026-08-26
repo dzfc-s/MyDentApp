@@ -31,16 +31,11 @@ namespace MyDent.WebAPI.Services.AccessManager
         {
             var user = await _userService.GetByUsernameAsync(request.Username);
 
-
-            if (user == null)
+            // Same message for "no such user" and "wrong password" so a caller can't
+            // enumerate valid usernames/emails by observing which error comes back.
+            if (user == null || !_cryptoService.Verify(user.PasswordHash, user.PasswordSalt, request.Password))
             {
-                throw new ClientException($"User with {request.Username} doesn't exist");
-            }
-
-            var validPassword = _cryptoService.Verify(user.PasswordHash, user.PasswordSalt, request.Password);
-            if (!validPassword)
-            {
-                throw new ClientException("Wrong credential");
+                throw new ClientException("Invalid username or password.");
             }
 
             var accessToken = GenerateToken(user);

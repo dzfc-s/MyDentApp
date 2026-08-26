@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:provider/provider.dart';
 
-import 'layouts/container_screen.dart';
+import 'layouts/container_screen.dart' show ContainerScreen, routeObserver;
 import 'theme/app_theme.dart';
 import 'providers/appointment_provider.dart';
 import 'providers/asset_provider.dart';
@@ -19,10 +19,12 @@ import 'providers/recommendation_provider.dart';
 import 'providers/review_provider.dart';
 import 'providers/service_category_provider.dart';
 import 'providers/user_provider.dart';
+import 'screens/forgot_password_screen.dart';
 import 'screens/register_screen.dart';
+import 'utils/utils_widgets.dart';
 import 'widgets/tooth_icon.dart';
 
-void main() {
+void main() async {
   // Publishable key only (safe client-side) — pass the real one via
   // --dart-define=stripePublishableKey=pk_test_... from the same Stripe account as the
   // backend's Stripe__SecretKey. Payments will fail against Stripe until this is set.
@@ -30,6 +32,12 @@ void main() {
     "stripePublishableKey",
     defaultValue: "",
   );
+  // Setting publishableKey alone only stores it on the Dart side — the native Stripe SDK
+  // is never actually configured with it until applySettings() is awaited. Without this,
+  // Stripe.instance.initPaymentSheet() in payment_screen.dart just hangs forever (no error,
+  // no timeout) instead of either working or failing cleanly.
+  WidgetsFlutterBinding.ensureInitialized();
+  await Stripe.instance.applySettings();
 
   runApp(
     MultiProvider(
@@ -62,6 +70,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'MyDent',
       theme: buildAppTheme(),
+      navigatorObservers: [routeObserver],
       home: LoginPage(),
     );
   }
@@ -94,7 +103,7 @@ class _LoginPageState extends State<LoginPage> {
       if (!mounted) return;
       Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const ContainerScreen()));
     } on Exception catch (e) {
-      alertBox(context, "Error", e.toString());
+      if (mounted) alertBox(context, "Error", e.toString());
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -144,7 +153,7 @@ class _LoginPageState extends State<LoginPage> {
                 TextField(
                   controller: _usernameController,
                   decoration: const InputDecoration(
-                    labelText: 'Korisničko ime',
+                    labelText: 'Korisničko ime ili email',
                     prefixIcon: Icon(Icons.person_outline),
                   ),
                 ),
@@ -182,6 +191,15 @@ class _LoginPageState extends State<LoginPage> {
                   },
                   child: const Text("Nemate nalog? Registrujte se"),
                 ),
+                TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const ForgotPasswordScreen()),
+                    );
+                  },
+                  child: const Text("Zaboravili ste lozinku?"),
+                ),
               ],
             ),
           ),
@@ -190,24 +208,6 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 }
-
-void alertBox(BuildContext context, String title, String content) {
-     showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: Text(content),
-        actions: [
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-            },
-            child: Text("OK"),
-          ),
-        ],
-      ),
-    );
-  }
 
 // (Unused `MyHomePage`/`_MyHomePageState` boilerplate from the default
 // `flutter create` template — nothing referenced it — removed here.)

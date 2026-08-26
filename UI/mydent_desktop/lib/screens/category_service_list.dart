@@ -16,8 +16,6 @@ import 'service_category_details_screen.dart';
 /// services only ever make sense in the context of their category (that's
 /// what determines which doctors can perform them), so browsing them as two
 /// unrelated flat tables meant constantly cross-referencing IDs by eye.
-/// Deliberately has no search — the whole point is a small, at-a-glance
-/// browse view, not a table to filter through.
 class CategoryServiceList extends StatefulWidget {
   const CategoryServiceList({super.key});
 
@@ -28,6 +26,7 @@ class CategoryServiceList extends StatefulWidget {
 class _CategoryServiceListState extends State<CategoryServiceList> {
   late ServiceCategoryProvider _categoryProvider;
   late DentalServiceProvider _serviceProvider;
+  final TextEditingController _searchController = TextEditingController();
 
   bool isLoading = true;
   List<ServiceCategory> _categories = [];
@@ -39,6 +38,13 @@ class _CategoryServiceListState extends State<CategoryServiceList> {
     _categoryProvider = context.read<ServiceCategoryProvider>();
     _serviceProvider = context.read<DentalServiceProvider>();
     _load();
+    _searchController.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -63,9 +69,25 @@ class _CategoryServiceListState extends State<CategoryServiceList> {
   }
 
   List<DentalService> _servicesFor(int? categoryId) {
-    final list = _services.where((s) => s.serviceCategoryId == categoryId).toList();
+    final query = _searchController.text.trim().toLowerCase();
+    final list = _services
+        .where((s) =>
+            s.serviceCategoryId == categoryId &&
+            (query.isEmpty || (s.name ?? '').toLowerCase().contains(query)))
+        .toList();
     list.sort((a, b) => (a.name ?? '').compareTo(b.name ?? ''));
     return list;
+  }
+
+  // A category stays visible while searching if its own name matches, or if it has at least
+  // one service matching — otherwise there'd be nothing left to show under it anyway.
+  List<ServiceCategory> get _visibleCategories {
+    final query = _searchController.text.trim().toLowerCase();
+    if (query.isEmpty) return _categories;
+    return _categories.where((c) {
+      final nameMatches = (c.name ?? '').toLowerCase().contains(query);
+      return nameMatches || _servicesFor(c.id).isNotEmpty;
+    }).toList();
   }
 
   @override
@@ -79,22 +101,39 @@ class _CategoryServiceListState extends State<CategoryServiceList> {
             ? const Center(child: CircularProgressIndicator())
             : Column(
                 children: [
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: ElevatedButton.icon(
-                      onPressed: _newCategory,
-                      icon: const Icon(Icons.add),
-                      label: const Text("Nova kategorija"),
-                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _searchController,
+                          decoration: InputDecoration(
+                            labelText: "Pretraga po nazivu kategorije ili usluge",
+                            prefixIcon: const Icon(Icons.search),
+                            border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8)),
+                            isDense: true,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      ElevatedButton.icon(
+                        onPressed: _newCategory,
+                        icon: const Icon(Icons.add),
+                        label: const Text("Nova kategorija"),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 8),
                   Expanded(
-                    child: _categories.isEmpty
-                        ? const Center(child: Text("Nema kategorija usluga."))
+                    child: _visibleCategories.isEmpty
+                        ? Center(
+                            child: Text(_categories.isEmpty
+                                ? "Nema kategorija usluga."
+                                : "Nema rezultata za tu pretragu."))
                         : ListView.builder(
-                            itemCount: _categories.length,
+                            itemCount: _visibleCategories.length,
                             itemBuilder: (context, index) =>
-                                _buildCategoryCard(_categories[index]),
+                                _buildCategoryCard(_visibleCategories[index]),
                           ),
                   ),
                 ],
@@ -179,8 +218,10 @@ class _CategoryServiceListState extends State<CategoryServiceList> {
     // A service can't be meaningfully edited/reactivated on its own while
     // its category is inactive — it would immediately look broken again
     // (offered nowhere, since booking already only looks at active
-    // categories) — the category has to come back first.
-    final editable = categoryActive;
+    // categories) — the category has to come back first. Same reasoning for
+    // an inactive service itself: reactivate it (the restore button below)
+    // before editing its other fields, rather than editing a deleted record.
+    final editable = categoryActive && serviceActive;
 
     return Opacity(
       opacity: editable ? 1 : 0.55,

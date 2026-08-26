@@ -40,13 +40,22 @@ namespace MyDent.Services
 
         protected override IQueryable<Appointment> ApplyFilters(IQueryable<Appointment> query, AppointmentSearch? search)
         {
+            // Same private-data principle as Notification/Payment/News — a non-Admin only ever
+            // sees their own appointments, no matter what PatientId they pass in search. This was
+            // previously missing entirely (only applied a PatientId filter when the caller supplied
+            // one), so any authenticated patient could list or page through every other patient's
+            // appointments by simply omitting it.
+            if (!_userAccessor.IsInRole("Admin"))
+            {
+                query = query.Where(a => a.PatientId == _userAccessor.GetUserId());
+            }
+            else if (search?.PatientId.HasValue == true)
+            {
+                query = query.Where(a => a.PatientId == search.PatientId.Value);
+            }
+
             if (search != null)
             {
-                if (search.PatientId.HasValue)
-                {
-                    query = query.Where(a => a.PatientId == search.PatientId.Value);
-                }
-
                 if (search.DoctorId.HasValue)
                 {
                     query = query.Where(a => a.DoctorId == search.DoctorId.Value);
@@ -131,7 +140,7 @@ namespace MyDent.Services
                 .ToListAsync();
 
             var duration = TimeSpan.FromMinutes(dentalService.DurationMinutes);
-            var now = DateTime.UtcNow;
+            var now = ClinicClock.Now;
             var slots = new List<AvailableSlotResponse>();
 
             foreach (var shift in workingHours)
@@ -219,6 +228,22 @@ namespace MyDent.Services
 
         public async Task<AppointmentResponse> CancelAsync(int id, AppointmentCancelRequest request)
         {
+            // Client (mobile/desktop) already requires this field, but that's not enforced against
+            // a direct API call — the reason is part of the audit trail (AddStatusHistoryAsync
+            // below) and shown to the patient, so it can't be silently empty.
+            if (string.IsNullOrWhiteSpace(request.CancellationReason))
+            {
+                throw new ClientException("CancellationReason is required.");
+            }
+
+            // Matches Appointment.CancellationReason's [MaxLength(500)] — without this, an
+            // overlong reason would reach SaveChangesAsync and fail as a raw SQL truncation
+            // error instead of a clean validation message.
+            if (request.CancellationReason.Length > 500)
+            {
+                throw new ClientException("CancellationReason cannot exceed 500 characters.");
+            }
+
             var entity = await _dbContext.Appointments.FindAsync(id)
                 ?? throw new KeyNotFoundException($"Appointment with id {id} not found.");
 
@@ -237,6 +262,16 @@ namespace MyDent.Services
             entity.CancellationReason = request.CancellationReason;
             entity.CancelledByUserId = _userAccessor.GetUserId();
             entity.CancelledAt = DateTime.UtcNow;
+
+            // Status history and the pending-payments cleanup below are two separate
+            // SaveChangesAsync calls that must land together — a crash between them would
+            // otherwise leave the appointment cancelled with a stale "Pending" payment record.
+            // Reentrant: DoctorService/DentalServiceService call this in a loop from inside their
+            // own outer transaction — EF Core throws if BeginTransactionAsync is called again on a
+            // DbContext that already has one active, so only start (and only commit) one here when
+            // nothing outer already owns it.
+            var ownsTransaction = _dbContext.Database.CurrentTransaction == null;
+            var transaction = ownsTransaction ? await _dbContext.Database.BeginTransactionAsync() : null;
 
             await AddStatusHistoryAsync(entity, AppointmentStatus.Cancelled, request.CancellationReason);
             await _dbContext.SaveChangesAsync();
@@ -257,14 +292,45 @@ namespace MyDent.Services
                 cancelMessage += " Uplata za ovaj termin će biti obrađena od strane klinike.";
             }
 
-            await _eventPublisher.PublishNotificationAsync(new NotificationInsertRequest
+            // A still-Pending payment (patient started paying but never finished — abandoned the
+            // PaymentSheet, app closed mid-flow, ...) can never be completed once the appointment
+            // itself is cancelled: the "Plati" button only shows for Confirmed appointments. Left
+            // alone it would sit in the Payments list looking like an active pending payment
+            // forever instead of reflecting that it never went through.
+            var pendingPayments = await _dbContext.Payments
+                .Where(p => p.AppointmentId == entity.Id && p.Status == PaymentStatus.Pending)
+                .ToListAsync();
+            foreach (var pendingPayment in pendingPayments)
             {
-                UserId = entity.PatientId,
-                Title = "Termin otkazan",
-                Message = cancelMessage,
-                Type = NotificationType.AppointmentCancelled,
-                AppointmentId = entity.Id
-            });
+                pendingPayment.Status = PaymentStatus.Failed;
+            }
+            if (pendingPayments.Count > 0)
+            {
+                await _dbContext.SaveChangesAsync();
+            }
+
+            if (ownsTransaction)
+            {
+                await transaction!.CommitAsync();
+                await transaction.DisposeAsync();
+            }
+
+            // A patient cancelling their own appointment already knows it's cancelled — they just
+            // did it. A notification only tells them something new when someone/something else
+            // cancelled it for them (Admin, or the automatic doctor/service-deactivation cascade),
+            // or when there's a paid-appointment follow-up they need to be aware of.
+            var isSelfCancel = !_userAccessor.IsInRole("Admin") && entity.CancelledByUserId == entity.PatientId;
+            if (!isSelfCancel || isPaid)
+            {
+                await _eventPublisher.PublishNotificationAsync(new NotificationInsertRequest
+                {
+                    UserId = entity.PatientId,
+                    Title = "Termin otkazan",
+                    Message = cancelMessage,
+                    Type = NotificationType.AppointmentCancelled,
+                    AppointmentId = entity.Id
+                });
+            }
 
             return _mapper.Map<AppointmentResponse>(entity);
         }
@@ -310,7 +376,7 @@ namespace MyDent.Services
                 throw new ClientException("The selected doctor is not specialized in this service's category.");
             }
 
-            if (request.ScheduledAt <= DateTime.UtcNow)
+            if (request.ScheduledAt <= ClinicClock.Now)
             {
                 throw new ClientException("ScheduledAt must be in the future.");
             }
@@ -376,10 +442,26 @@ namespace MyDent.Services
             return _mapper.Map<AppointmentResponse>(entity);
         }
 
+        // GetAllAsync goes through ApplyFilters above, but GetByIdAsync bypasses it — needs its
+        // own ownership check, same reasoning as Notification/Payment/News.
+        public override async Task<AppointmentResponse> GetByIdAsync(int id)
+        {
+            var entity = await _dbContext.Appointments
+                .Include(a => a.Patient).Include(a => a.Doctor).Include(a => a.DentalService)
+                .FirstOrDefaultAsync(a => a.Id == id);
+
+            if (entity == null || (!_userAccessor.IsInRole("Admin") && entity.PatientId != _userAccessor.GetUserId()))
+            {
+                throw new KeyNotFoundException($"Appointment with id {id} not found.");
+            }
+
+            return _mapper.Map<AppointmentResponse>(entity);
+        }
+
         public async Task<List<AppointmentStatusHistoryResponse>> GetHistoryAsync(int id)
         {
-            var exists = await _dbContext.Appointments.AnyAsync(a => a.Id == id);
-            if (!exists)
+            var appointment = await _dbContext.Appointments.FirstOrDefaultAsync(a => a.Id == id);
+            if (appointment == null || (!_userAccessor.IsInRole("Admin") && appointment.PatientId != _userAccessor.GetUserId()))
             {
                 throw new KeyNotFoundException($"Appointment with id {id} not found.");
             }

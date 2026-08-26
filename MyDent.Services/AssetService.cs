@@ -37,5 +37,19 @@ namespace MyDent.Services
 
             return query;
         }
+
+        // A page of Assets can be up to MaxPageSize (2000) rows — returning full Base64 image
+        // content for every one of them here (instead of just on GetByIdAsync, which nothing calls
+        // this heavily) would make list responses enormous for no reason nothing in either Flutter
+        // app actually reads that field from a list call.
+        public override async Task<PageResult<AssetResponse>> GetAllAsync(AssetSearch? search = null)
+        {
+            var result = await base.GetAllAsync(search);
+            foreach (var item in result.Items)
+            {
+                item.Base64Content = string.Empty;
+            }
+            return result;
+        }
     }
 }

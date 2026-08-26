@@ -5,6 +5,7 @@ using MyDent.Model.Requests;
 using MyDent.Model.Responses;
 using MyDent.Model.SearchObjects;
 using MyDent.Services.Database;
+using MyDent.Services.Messaging;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using System;
@@ -20,11 +21,30 @@ namespace MyDent.Services
     {
         private readonly ICryptoService _cryptoService;
         private readonly IAuthenticatedUserAccessor _userAccessor;
-        public UserService(MyDentDbContext dbContext, MapsterMapper.IMapper mapper, IValidator<UserInsertRequest> insertValidator, IValidator<UserUpdateRequest> updateValidator, ICryptoService cryptoService, IAuthenticatedUserAccessor userAccessor)
+        private readonly IEmailEventPublisher _emailPublisher;
+        private readonly IValidator<UserPasswordChangeRequest> _passwordChangeValidator;
+        private readonly IValidator<ForgotPasswordRequest> _forgotPasswordValidator;
+        private readonly IValidator<ResetPasswordRequest> _resetPasswordValidator;
+
+        public UserService(
+            MyDentDbContext dbContext,
+            MapsterMapper.IMapper mapper,
+            IValidator<UserInsertRequest> insertValidator,
+            IValidator<UserUpdateRequest> updateValidator,
+            ICryptoService cryptoService,
+            IAuthenticatedUserAccessor userAccessor,
+            IEmailEventPublisher emailPublisher,
+            IValidator<UserPasswordChangeRequest> passwordChangeValidator,
+            IValidator<ForgotPasswordRequest> forgotPasswordValidator,
+            IValidator<ResetPasswordRequest> resetPasswordValidator)
             : base(dbContext, mapper, insertValidator, updateValidator)
         {
             _cryptoService = cryptoService;
             _userAccessor = userAccessor;
+            _emailPublisher = emailPublisher;
+            _passwordChangeValidator = passwordChangeValidator;
+            _forgotPasswordValidator = forgotPasswordValidator;
+            _resetPasswordValidator = resetPasswordValidator;
         }
 
 
@@ -82,17 +102,24 @@ namespace MyDent.Services
 
         public override async Task<UserResponse> InsertAsync(UserInsertRequest request)
         {
+            // Trim + lowercase before anything else touches Email/Username, so validation,
+            // the uniqueness checks below, and stored data all agree on one canonical form —
+            // otherwise "User@Example.com" and "user@example.com " (trailing space) are treated
+            // as different values and can register as separate accounts / fail to log back in.
+            request.Email = request.Email.Trim().ToLowerInvariant();
+            request.Username = request.Username.Trim().ToLowerInvariant();
+
             // let FluentValidation throw if the request isn't valid; the exception filter will
             // convert the resulting ValidationException into the standard error format.
             await _insertValidator.ValidateAndThrowAsync(request);
 
             // Check if email or username already exists
-            if (await _dbContext.Users.AnyAsync(u => u.Email == request.Email))
+            if (await _dbContext.Users.AnyAsync(u => u.Email.ToLower() == request.Email))
             {
                 throw new InvalidOperationException($"Email '{request.Email}' is already in use.");
             }
 
-            if (await _dbContext.Users.AnyAsync(u => u.Username == request.Username))
+            if (await _dbContext.Users.AnyAsync(u => u.Username.ToLower() == request.Username))
             {
                 throw new InvalidOperationException($"Username '{request.Username}' is already in use.");
             }
@@ -164,6 +191,15 @@ namespace MyDent.Services
                 throw new ClientException("You can only edit your own profile.");
             }
 
+            if (request.Email != null)
+            {
+                request.Email = request.Email.Trim().ToLowerInvariant();
+            }
+            if (request.Username != null)
+            {
+                request.Username = request.Username.Trim().ToLowerInvariant();
+            }
+
             await _updateValidator.ValidateAndThrowAsync(request);
 
             var entity = await _dbContext.Users.FindAsync(id);
@@ -173,12 +209,12 @@ namespace MyDent.Services
             }
 
             // Check if email or username already exists
-            if (await _dbContext.Users.AnyAsync(u => u.Email == request.Email && u.Id != id))
+            if (await _dbContext.Users.AnyAsync(u => u.Email.ToLower() == request.Email && u.Id != id))
             {
                 throw new InvalidOperationException($"Email '{request.Email}' is already in use.");
             }
 
-            if (await _dbContext.Users.AnyAsync(u => u.Username == request.Username && u.Id != id))
+            if (await _dbContext.Users.AnyAsync(u => u.Username.ToLower() == request.Username && u.Id != id))
             {
                 throw new InvalidOperationException($"Username '{request.Username}' is already in use.");
             }
@@ -191,25 +227,18 @@ namespace MyDent.Services
             return _mapper.Map<UserResponse>(entity);
         }
 
-        public override async Task DeleteAsync(int id)
-        {
-            var entity = await _dbContext.Users.FirstOrDefaultAsync(u => u.Id == id);
-            if (entity == null)
-            {
-                throw new KeyNotFoundException($"User with id {id} not found.");
-            }
-
-            _dbContext.Users.Remove(entity);
-            await _dbContext.SaveChangesAsync();
-        }
-
         public async Task<UserSensitveResponse?> GetByUsernameAsync(string username)
         {
+            // Despite the parameter name, this also matches by Email — the approved project scope
+            // specifies "login via email + password" for the mobile app, but username-based login
+            // already worked and plenty of people expect either to work, so this accepts both
+            // instead of removing one.
+            var normalized = username.Trim().ToLowerInvariant();
             var user = await _dbContext.Users
                 .AsNoTracking()
                 .Include(u => u.UserRoles)
                 .ThenInclude(ur => ur.Role)
-                .FirstOrDefaultAsync(u => u.Username == username);
+                .FirstOrDefaultAsync(u => u.Username.ToLower() == normalized || u.Email.ToLower() == normalized);
 
             UserSensitveResponse? response = null;
 
@@ -243,6 +272,8 @@ namespace MyDent.Services
 
         public async Task ChangePasswordAsync(UserPasswordChangeRequest request)
         {
+            await _passwordChangeValidator.ValidateAndThrowAsync(request);
+
             var userId = _userAccessor.GetUserId()
                 ?? throw new ClientException("Authenticated user could not be resolved.");
             var user = _dbContext.Users.FirstOrDefault(u => u.Id == userId);
@@ -251,10 +282,10 @@ namespace MyDent.Services
                 throw new ClientException("User not found");
 
             if (!_cryptoService.Verify(user.PasswordHash, user.PasswordSalt, request.Password))
-                throw new ClientException("Wrong credential");
+                throw new ClientException("Trenutna lozinka nije tačna.");
 
             if (!request.NewPassword.Equals(request.ConfirmNewPassword))
-                throw new ClientException("Password confirmation doesn't match new password");
+                throw new ClientException("Nova lozinka i potvrda lozinke se ne podudaraju.");
 
             user.PasswordSalt = _cryptoService.GenerateSalt();
             user.PasswordHash = _cryptoService.GenerateHash(request.NewPassword, user.PasswordSalt);
@@ -262,6 +293,90 @@ namespace MyDent.Services
 
             _dbContext.Users.Update(user);
             await _dbContext.SaveChangesAsync();
+        }
+
+        // Doesn't reveal whether the email exists — always returns normally either way, so an
+        // attacker can't use this endpoint to enumerate registered emails.
+        public async Task ForgotPasswordAsync(ForgotPasswordRequest request)
+        {
+            await _forgotPasswordValidator.ValidateAndThrowAsync(request);
+
+            var user = await _dbContext.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
+            if (user == null)
+            {
+                return;
+            }
+
+            // A fresh request invalidates any earlier unused code for this user — only the most
+            // recently requested one should work.
+            var previousTokens = await _dbContext.PasswordResetTokens
+                .Where(t => t.UserId == user.Id && t.UsedAt == null)
+                .ToListAsync();
+            _dbContext.PasswordResetTokens.RemoveRange(previousTokens);
+
+            // 6-digit numeric code, emailed rather than a clickable link — no mobile deep-link
+            // handling needed. RandomNumberGenerator (not System.Random) for the actual randomness.
+            var code = RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
+
+            _dbContext.PasswordResetTokens.Add(new PasswordResetToken
+            {
+                UserId = user.Id,
+                CodeHash = HashResetCode(request.Email, code),
+                ExpiresAt = DateTime.UtcNow.AddMinutes(15),
+                CreatedAt = DateTime.UtcNow
+            });
+            await _dbContext.SaveChangesAsync();
+
+            await _emailPublisher.PublishPasswordResetEmailAsync(new PasswordResetEmailRequest
+            {
+                ToEmail = user.Email,
+                FirstName = user.FirstName,
+                Code = code
+            });
+        }
+
+        public async Task ResetPasswordAsync(ResetPasswordRequest request)
+        {
+            await _resetPasswordValidator.ValidateAndThrowAsync(request);
+
+            if (!request.NewPassword.Equals(request.ConfirmNewPassword))
+            {
+                throw new ClientException("Nova lozinka i potvrda lozinke se ne podudaraju.");
+            }
+
+            var user = await _dbContext.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
+            var codeHash = user != null ? HashResetCode(request.Email, request.Code) : null;
+
+            // Same "invalid code" message whether the email doesn't exist or the code is wrong/
+            // expired/already used — doesn't tell an attacker which case they hit.
+            var token = user == null
+                ? null
+                : await _dbContext.PasswordResetTokens
+                    .Where(t => t.UserId == user.Id && t.CodeHash == codeHash
+                        && t.UsedAt == null && t.ExpiresAt > DateTime.UtcNow)
+                    .OrderByDescending(t => t.CreatedAt)
+                    .FirstOrDefaultAsync();
+
+            if (user == null || token == null)
+            {
+                throw new ClientException("Kod je neispravan ili je istekao.");
+            }
+
+            token.UsedAt = DateTime.UtcNow;
+            user.PasswordSalt = _cryptoService.GenerateSalt();
+            user.PasswordHash = _cryptoService.GenerateHash(request.NewPassword, user.PasswordSalt);
+
+            await _dbContext.SaveChangesAsync();
+        }
+
+        // Codes are short (6 digits) and short-lived (15 min) — a fast, unsalted hash is fine here
+        // (this is not password storage; SHA-256 just keeps the raw code out of the database, per
+        // the "reset kodovi se ne smiju čuvati u plain text formatu" requirement). Salted with the
+        // email so the same code for two different accounts never collides in the DB.
+        private static string HashResetCode(string email, string code)
+        {
+            var bytes = Encoding.UTF8.GetBytes($"{email.ToLowerInvariant()}:{code}");
+            return Convert.ToBase64String(SHA256.HashData(bytes));
         }
     }
 }

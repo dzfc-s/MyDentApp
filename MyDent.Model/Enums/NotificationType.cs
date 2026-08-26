@@ -6,6 +6,10 @@ namespace MyDent.Model.Enums
         AppointmentConfirmed,
         AppointmentCancelled,
         AppointmentReminder,
-        RecurringServiceReminder
+        RecurringServiceReminder,
+        // Appended, not inserted — this enum is stored as an int, so existing rows' values must
+        // never shift.
+        PaymentSucceeded,
+        PaymentRefunded
     }
 }

@@ -10,9 +10,9 @@ import '../screens/doctor_absence_list.dart';
 import '../screens/doctor_list.dart';
 import '../screens/news_list.dart';
 import '../screens/notification_list.dart';
+import '../screens/patient_list.dart';
 import '../screens/payment_list.dart';
 import '../screens/review_list.dart';
-import '../screens/user_list.dart';
 import '../models/enums.dart';
 import '../providers/appointment_provider.dart';
 import '../theme/app_theme.dart';
@@ -28,7 +28,7 @@ enum AppSection {
   payments,
   notifications,
   news,
-  users,
+  patients,
 }
 
 /// Persistent left sidebar (not a hide-until-tapped Drawer) — every admin screen stays reachable
@@ -210,6 +210,32 @@ class _Sidebar extends StatelessWidget {
               ],
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.location_on_outlined,
+                    size: 14, color: Colors.white38),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(ClinicInfo.name,
+                          style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600)),
+                      Text(ClinicInfo.address,
+                          style: const TextStyle(
+                              color: Colors.white38, fontSize: 10)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
           const Divider(color: Colors.white12, height: 1),
           Expanded(
             child: ListView(
@@ -223,6 +249,8 @@ class _Sidebar extends StatelessWidget {
                     AppSection.dentalServices, () => const CategoryServiceList()),
                 _tile(context, Icons.people_alt_outlined, 'Doktori',
                     AppSection.doctors, () => const DoctorList()),
+                _tile(context, Icons.medical_information_outlined, 'Pacijenti',
+                    AppSection.patients, () => const PatientList()),
                 _tile(context, Icons.event_busy, 'Odsustva',
                     AppSection.doctorAbsences, () => const DoctorAbsenceList()),
                 _tile(context, Icons.reviews_outlined, 'Recenzije',
@@ -233,8 +261,6 @@ class _Sidebar extends StatelessWidget {
                     AppSection.notifications, () => const NotificationList()),
                 _tile(context, Icons.article_outlined, 'Novosti',
                     AppSection.news, () => const NewsList()),
-                _tile(context, Icons.people, 'Korisnici',
-                    AppSection.users, () => const UserList()),
               ],
             ),
           ),

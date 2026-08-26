@@ -92,7 +92,11 @@ class _BookingConfirmScreenState extends State<BookingConfirmScreen> {
       body: ListView(
         padding: EdgeInsets.zero,
         children: [
-          const BookingSteps(step: 3),
+          BookingSteps(
+            step: 3,
+            onBack: _isBooking ? null : () => Navigator.maybePop(context),
+            onNext: _isBooking ? null : _confirm,
+          ),
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(

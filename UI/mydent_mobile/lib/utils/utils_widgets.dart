@@ -2,8 +2,13 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
-void alertBox(BuildContext context, String title, String content) {
-     showDialog(
+// Returns the dialog's Future so a caller that needs to navigate away right
+// after showing it can `await` this first — popping the underlying screen
+// immediately (fire-and-forget) tears the dialog down before it's ever seen
+// (see PaymentScreen for the bug this caused: the error alert flashed and
+// vanished together with the screen behind it, in one frame).
+Future<void> alertBox(BuildContext context, String title, String content) {
+  return showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(title),
@@ -62,6 +67,6 @@ Image placeholderImage() {
 }
 
 
- const String mField = "This filed is mandatory";
+ const String mField = "Ovo polje je obavezno";
 
-const String numericField = "This filed is numeric";
+const String numericField = "Ovo polje mora biti broj";

@@ -1,9 +1,11 @@
+using MyDent.Model.Exceptions;
 using MyDent.Model.Responses;
 using MyDent.Model.SearchObjects;
 using MyDent.Services.Database;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Threading.Tasks;
 using System.Linq.Dynamic.Core;
 using Microsoft.EntityFrameworkCore;
@@ -56,8 +58,7 @@ namespace MyDent.Services
 
             if (!string.IsNullOrWhiteSpace(search.SortBy))
             {
-                //TODO: parametrize sortBy to prevent SQL injection
-                query = query.OrderBy(search.SortBy);
+                query = query.OrderBy(ValidateSortBy(search.SortBy));
             }
 
             var effectivePageSize = Math.Min(search.PageSize ?? MaxPageSize, MaxPageSize);
@@ -82,6 +83,34 @@ namespace MyDent.Services
             };
 
             return pageResult;
+        }
+
+        // search.SortBy is a raw client-supplied string fed into System.Linq.Dynamic.Core's
+        // string-based OrderBy — passing it through unchecked lets a caller reference arbitrary
+        // members/expressions instead of just a column to sort by. Restrict it to an actual public
+        // property name on TEntity (optionally suffixed with "asc"/"desc") before it ever reaches
+        // Dynamic Linq.
+        private static string ValidateSortBy(string sortBy)
+        {
+            var parts = sortBy.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var propertyName = parts[0];
+            var direction = parts.Length > 1 ? parts[1].ToLowerInvariant() : null;
+
+            if (direction != null && direction != "asc" && direction != "desc")
+            {
+                throw new ClientException($"Invalid sort direction '{parts[1]}'. Use 'asc' or 'desc'.");
+            }
+
+            var property = typeof(TEntity).GetProperty(
+                propertyName,
+                BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+
+            if (property == null)
+            {
+                throw new ClientException($"Cannot sort by unknown field '{propertyName}'.");
+            }
+
+            return direction == null ? property.Name : $"{property.Name} {direction}";
         }
 
         protected virtual async Task<IQueryable<TEntity>> IncludeRelatedEntitiesAsync(TSearch? search, IQueryable<TEntity> query = null)

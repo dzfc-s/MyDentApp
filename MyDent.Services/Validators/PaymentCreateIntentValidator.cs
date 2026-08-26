@@ -30,14 +30,21 @@ namespace MyDent.Services.Validators
                     return;
                 }
 
-                if (appointment.Status == AppointmentStatus.Cancelled)
+                // Pending hasn't been reviewed by staff yet — it could still be declined, and a
+                // pre-payment sitting against a not-yet-confirmed slot has no clean unwind if it
+                // never gets confirmed. Completed is also excluded (nothing left to pay towards
+                // once the visit already happened without a payment).
+                if (appointment.Status != AppointmentStatus.Confirmed)
                 {
-                    context.AddFailure("AppointmentId", "Cannot pay for a cancelled appointment.");
+                    context.AddFailure("AppointmentId",
+                        $"Only confirmed appointments can be paid (current status: {appointment.Status}).");
                     return;
                 }
 
+                // A Failed payment (abandoned PaymentSheet, declined card, ...) doesn't block a
+                // retry — only a still-live Pending attempt or an already-succeeded Paid one does.
                 var existingPayment = await dbContext.Payments
-                    .AnyAsync(p => p.AppointmentId == request.AppointmentId, cancellation);
+                    .AnyAsync(p => p.AppointmentId == request.AppointmentId && p.Status != PaymentStatus.Failed, cancellation);
 
                 if (existingPayment)
                 {

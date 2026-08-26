@@ -8,6 +8,7 @@ import '../models/search_result.dart';
 import '../providers/appointment_provider.dart';
 import '../providers/doctor_provider.dart';
 import '../providers/review_provider.dart';
+import '../utils/slot_utils.dart';
 import '../utils/utils_widgets.dart';
 import '../widgets/asset_avatar.dart';
 import '../widgets/booking_steps.dart';
@@ -43,9 +44,12 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
   Doctor? _selectedDoctor;
   DateTime _selectedDate = DateTime.now();
   List<AvailableSlot> _slots = [];
+  AvailableSlot? _selectedSlot;
   Map<int, _DoctorStats> _doctorStats = {};
   bool isLoadingDoctors = true;
   bool isLoadingSlots = false;
+  DateTime? _nextAvailableDate;
+  bool _searchingNextDate = false;
 
   @override
   void initState() {
@@ -97,7 +101,11 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
 
   Future<void> _loadSlots() async {
     if (_selectedDoctor == null) return;
-    setState(() => isLoadingSlots = true);
+    setState(() {
+      isLoadingSlots = true;
+      _selectedSlot = null;
+      _nextAvailableDate = null;
+    });
     try {
       final slots = await _appointmentProvider.getAvailableSlots(
         doctorId: _selectedDoctor!.id!,
@@ -109,6 +117,21 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
         _slots = slots;
         isLoadingSlots = false;
       });
+
+      if (slots.isEmpty) {
+        setState(() => _searchingNextDate = true);
+        final next = await findNextAvailableDate(
+          provider: _appointmentProvider,
+          doctorId: _selectedDoctor!.id!,
+          dentalServiceId: widget.service.id!,
+          startDate: _selectedDate,
+        );
+        if (!mounted) return;
+        setState(() {
+          _nextAvailableDate = next;
+          _searchingNextDate = false;
+        });
+      }
     } on Exception catch (e) {
       setState(() => isLoadingSlots = false);
       if (mounted) alertBox(context, 'Greška', e.toString());
@@ -136,8 +159,13 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
   /// Doesn't book yet — hands off to [BookingConfirmScreen], which shows a
   /// summary + cancellation policy and only calls the booking API once the
   /// patient explicitly confirms (see that screen's doc comment for why).
+  /// Marks the tapped chip selected *before* navigating (not just while the
+  /// push animates) so that coming back from step 3 via "Nazad" shows this
+  /// screen exactly as it was left, instead of a plain, unselected slot list
+  /// that looks like the earlier choice was forgotten.
   void _selectSlot(AvailableSlot slot) {
     if (_selectedDoctor == null) return;
+    setState(() => _selectedSlot = slot);
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -220,7 +248,11 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
       appBar: AppBar(title: Text("Zakazivanje — ${widget.service.name}")),
       body: Column(
         children: [
-          const BookingSteps(step: 2),
+          BookingSteps(
+            step: 2,
+            onBack: () => Navigator.maybePop(context),
+            onNext: _selectedSlot != null ? () => _selectSlot(_selectedSlot!) : null,
+          ),
           Expanded(
             child: isLoadingDoctors
                 ? const Center(child: CircularProgressIndicator())
@@ -255,7 +287,44 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                     if (isLoadingSlots)
                       const Center(child: CircularProgressIndicator())
                     else if (_slots.isEmpty)
-                      const Text("Nema dostupnih termina za odabrani datum.")
+                      _searchingNextDate
+                          ? const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 4),
+                              child: Row(
+                                children: [
+                                  SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  ),
+                                  SizedBox(width: 8),
+                                  Text("Tražim sljedeći slobodan termin...",
+                                      style: TextStyle(color: Colors.grey)),
+                                ],
+                              ),
+                            )
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _nextAvailableDate != null
+                                      ? "Na odabrani datum nema slobodnog termina. Prvi sljedeći slobodan termin: ${formatShortDate(_nextAvailableDate!)}"
+                                      : "Na odabrani datum nema slobodnog termina.",
+                                  style: const TextStyle(color: Colors.grey),
+                                ),
+                                if (_nextAvailableDate != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 8),
+                                    child: OutlinedButton(
+                                      onPressed: () {
+                                        setState(() => _selectedDate = _nextAvailableDate!);
+                                        _loadSlots();
+                                      },
+                                      child: const Text("Idi na taj datum"),
+                                    ),
+                                  ),
+                              ],
+                            )
                     else ...[
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8),
@@ -271,9 +340,11 @@ class _BookAppointmentScreenState extends State<BookAppointmentScreen> {
                           final t = s.startTime!.toLocal();
                           final label =
                               "${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}";
-                          return ActionChip(
+                          final selected = _selectedSlot?.startTime == s.startTime;
+                          return ChoiceChip(
                             label: Text(label),
-                            onPressed: () => _selectSlot(s),
+                            selected: selected,
+                            onSelected: (_) => _selectSlot(s),
                           );
                         }).toList(),
                       ),

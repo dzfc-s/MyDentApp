@@ -67,6 +67,17 @@ namespace MyDent.Services
 
         protected override IQueryable<Review> ApplyFilters(IQueryable<Review> query, ReviewSearch? search)
         {
+            // Reviews are semi-public (approved reviews inform other patients browsing a
+            // doctor's profile), but unapproved ones and moderation are Admin/owner-only.
+            // A non-Admin caller may see: their own reviews (any approval state, so
+            // MyReviewsScreen can show a just-submitted pending review) plus everyone
+            // else's already-approved ones.
+            if (!_userAccessor.IsInRole("Admin"))
+            {
+                var callerId = _userAccessor.GetUserId();
+                query = query.Where(r => r.IsApproved || r.Appointment.PatientId == callerId);
+            }
+
             if (search != null)
             {
                 if (search.AppointmentId.HasValue)
@@ -90,7 +101,25 @@ namespace MyDent.Services
                 }
             }
 
-            return query;
+            return query.OrderByDescending(r => r.CreatedAt);
+        }
+
+        // GetAllAsync goes through ApplyFilters above, but GetByIdAsync bypasses it — needs
+        // its own visibility check, same reasoning as NewsService.GetByIdAsync.
+        public override async Task<ReviewResponse> GetByIdAsync(int id)
+        {
+            IQueryable<Review> query = _dbContext.Set<Review>();
+            query = await IncludeRelatedEntitiesAsync(null, query);
+            var entity = await query.FirstOrDefaultAsync(r => r.Id == id);
+
+            var callerId = _userAccessor.GetUserId();
+            if (entity == null ||
+                (!entity.IsApproved && !_userAccessor.IsInRole("Admin") && entity.Appointment.PatientId != callerId))
+            {
+                throw new KeyNotFoundException($"Review with id {id} not found.");
+            }
+
+            return _mapper.Map<ReviewResponse>(entity);
         }
     }
 }

@@ -54,6 +54,9 @@ services:
       # these two override whatever localhost-based values .env has for host use.
       ConnectionStrings__DefaultConnection: "Server=mydent-sqlserver-210057,1433;Database=210057;User Id=sa;Password=${DB_SA_PASSWORD};TrustServerCertificate=True;"
       RabbitMQ__HostName: mydent-rabbitmq-210057
+      # Program.cs now gates Swagger/OpenAPI behind IsDevelopment() (was unconditional) — without
+      # this, ASP.NET Core defaults to Production when unset, and Swagger becomes unreachable.
+      ASPNETCORE_ENVIRONMENT: Development
     ports:
       - "5126:8080"
     depends_on:

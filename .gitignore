@@ -22,6 +22,10 @@ obj/
 .env
 !.env.example
 
+## Flutter --dart-define-from-file secrets (Stripe publishable key, API URL) — real
+## env.json never committed, env.json.example stays tracked. See UI/mydent_mobile.
+UI/mydent_mobile/env.json
+
 ## OS
 Thumbs.db
 .DS_Store

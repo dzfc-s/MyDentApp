@@ -105,7 +105,7 @@ namespace MyDent.Services
             }
 
            
-            var entity = this._dbContext.Set<TEntity>().Find(id);
+            var entity = await this._dbContext.Set<TEntity>().FindAsync(id);
 
             if (entity == null)
                 throw new KeyNotFoundException($"{typeof(TEntity).Name} with id {id} not found.");
@@ -129,7 +129,7 @@ namespace MyDent.Services
         /// </summary>
         public virtual async Task DeleteAsync(int id)
         {
-            var entity = this._dbContext.Set<TEntity>().Find(id);
+            var entity = await this._dbContext.Set<TEntity>().FindAsync(id);
 
             if (entity == null)
                 throw new KeyNotFoundException($"{typeof(TEntity).Name} with id {id} not found.");

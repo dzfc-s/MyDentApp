@@ -12,6 +12,8 @@ namespace MyDent.Services
     {
         Task<PaymentIntentResponse> CreateIntentAsync(PaymentCreateIntentRequest request);
         Task<PaymentResponse> ConfirmAsync(int id);
+        Task<PaymentResponse> CancelAsync(int id);
         Task<PaymentResponse> RefundAsync(int id);
+        Task HandleWebhookAsync(string json, string stripeSignatureHeader, string webhookSecret);
     }
 }

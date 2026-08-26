@@ -31,12 +31,13 @@ class _NewsListState extends State<NewsList> {
   Future<void> initTable() async {
     try {
       var data = await _provider.get(filter: {"pageSize": 200});
+      if (!mounted) return;
       setState(() {
         result = data;
         isLoading = false;
       });
     } on Exception catch (e) {
-      alertBox(context, 'Greška', e.toString());
+      if (mounted) alertBox(context, 'Greška', e.toString());
     }
   }
 

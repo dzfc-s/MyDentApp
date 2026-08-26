@@ -138,6 +138,13 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
           FormBuilderTextField(
             name: "phoneNumber",
             decoration: const InputDecoration(labelText: "Telefon"),
+            validator: (v) {
+              if (v == null || v.trim().isEmpty) return null;
+              if (!RegExp(r'^\+?[0-9\s\-()]{6,20}$').hasMatch(v.trim())) {
+                return "Neispravan format telefona";
+              }
+              return null;
+            },
           ),
           const SizedBox(height: 10),
           FormBuilderCheckbox(name: 'isActive', title: const Text("Aktivan nalog")),

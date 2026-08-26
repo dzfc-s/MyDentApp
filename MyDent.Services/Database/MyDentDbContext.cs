@@ -14,6 +14,7 @@ namespace MyDent.Services.Database
         public DbSet<UserRole> UserRoles { get; set; }
         public DbSet<Asset> Assets { get; set; }
         public DbSet<RefreshToken> RefreshTokens { get; set; }
+        public DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
 
         public DbSet<ServiceCategory> ServiceCategories { get; set; }
         public DbSet<Doctor> Doctors { get; set; }

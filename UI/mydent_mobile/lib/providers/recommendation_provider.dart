@@ -10,6 +10,7 @@ import 'auth_provider.dart';
 // Not a CRUD resource — RecommendationsController.Get returns a plain List<RecommendationResponse>,
 // not the {items, totalCount} shape BaseProvider.get() expects — so this doesn't extend BaseProvider.
 class RecommendationProvider extends ChangeNotifier {
+  // See AuthProvider's constructor for the 10.0.2.2 reasoning.
   final String _baseUrl = const String.fromEnvironment(
     "API_BASE_URL",
     defaultValue: "http://10.0.2.2:5126/",

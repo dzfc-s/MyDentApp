@@ -48,7 +48,11 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                       name: "newPassword",
                       obscureText: true,
                       decoration: const InputDecoration(labelText: "Nova lozinka"),
-                      validator: (v) => (v == null || v.isEmpty) ? mField : null,
+                      validator: (v) {
+                        if (v == null || v.isEmpty) return mField;
+                        if (v.length < 6) return "Minimalno 6 karaktera";
+                        return null;
+                      },
                     ),
                     const SizedBox(height: 12),
                     FormBuilderTextField(

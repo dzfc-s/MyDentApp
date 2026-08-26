@@ -51,6 +51,22 @@ namespace MyDent.WebAPI.Controllers
             return Ok("You have registered successfully");
         }
 
+        // Part of the auth flow, same as Login/Register — a user who forgot their password by
+        // definition can't authenticate first. Never reveals whether the email exists.
+        [HttpPost("ForgotPassword")]
+        public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
+        {
+            await _userService.ForgotPasswordAsync(request);
+            return Ok();
+        }
+
+        [HttpPost("ResetPassword")]
+        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
+        {
+            await _userService.ResetPasswordAsync(request);
+            return Ok();
+        }
+
         // Server-side invalidation: revokes every refresh token this user has, so the session
         // can't be silently extended via LoginWithRefreshToken after logout. The access token
         // itself remains technically valid until it naturally expires (JwtToken__DurationInMinutes),

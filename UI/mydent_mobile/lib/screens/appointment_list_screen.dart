@@ -19,7 +19,14 @@ import 'appointment_details_screen.dart';
 /// Ostavi recenziju / Zakaži ponovo) instead of forcing a trip through the
 /// details screen for everything.
 class AppointmentListScreen extends StatefulWidget {
-  const AppointmentListScreen({super.key});
+  /// Bumped by `ContainerScreen` every time the Termini tab is switched to —
+  /// `IndexedStack` keeps this screen's State alive across tab switches, so
+  /// without this, `_load()` only ever ran once in `initState` (same
+  /// staleness `HomeScreen`/`NotificationListScreen` had — a just-booked
+  /// appointment wouldn't show here until a manual pull-to-refresh).
+  final int refreshTick;
+
+  const AppointmentListScreen({super.key, this.refreshTick = 0});
 
   @override
   State<AppointmentListScreen> createState() => _AppointmentListScreenState();
@@ -37,6 +44,12 @@ class _AppointmentListScreenState extends State<AppointmentListScreen>
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant AppointmentListScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.refreshTick != oldWidget.refreshTick) _load();
   }
 
   @override

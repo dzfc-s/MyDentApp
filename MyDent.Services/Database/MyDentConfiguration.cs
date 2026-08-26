@@ -20,6 +20,13 @@ namespace MyDent.Services.Database
                 .HasForeignKey(ur => ur.RoleId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            // Same lifecycle as RefreshToken — meaningless without the user, so it cascades too.
+            modelBuilder.Entity<PasswordResetToken>()
+                .HasOne(t => t.User)
+                .WithMany()
+                .HasForeignKey(t => t.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
             // A user's profile picture is an Asset row, referenced by Id (not stored inline on User).
             // SetNull: deleting the Asset just clears the reference, it must not delete the User.
             modelBuilder.Entity<User>()

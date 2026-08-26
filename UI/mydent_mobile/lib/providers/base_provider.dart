@@ -17,9 +17,14 @@ abstract class BaseProvider<T> with ChangeNotifier {
   /// API resource segment, e.g. `Doctors` → `{baseUrl}Doctors`.
   final String endpoint;
 
+  // See AuthProvider's constructor for why 127.0.0.1 (adb reverse) instead of 10.0.2.2.
   BaseProvider(this.endpoint) {
     _baseUrl ??= const String.fromEnvironment(
       "API_BASE_URL",
+      // 10.0.2.2 is the standard Android emulator alias for the host machine's localhost —
+      // works out of the box with zero extra setup. Override with --dart-define=API_BASE_URL=...
+      // for a physical device (USB via `adb reverse tcp:5126 tcp:5126` + 127.0.0.1, or the PC's
+      // LAN address over WiFi).
       defaultValue: "http://10.0.2.2:5126/",
     );
   }
@@ -32,9 +37,10 @@ abstract class BaseProvider<T> with ChangeNotifier {
     }
 
     var uri = Uri.parse(url);
-    var headers = createHeaders();
 
-    var response = await http.get(uri, headers: headers);
+    var response = await _sendWithAuthRetry(
+      (headers) => http.get(uri, headers: headers),
+    );
 
     validateResponse(response);
     var data = jsonDecode(response.body);
@@ -50,11 +56,9 @@ abstract class BaseProvider<T> with ChangeNotifier {
   Future<T> getById(int id) async {
     var url = "$_baseUrl$endpoint/$id";
     var uri = Uri.parse(url);
-    var headers = createHeaders();
 
-    http.Response response = await http.get(uri, headers: headers);
-    print(
-      "response: ${response.request} ${response.statusCode}, ${response.body}",
+    var response = await _sendWithAuthRetry(
+      (headers) => http.get(uri, headers: headers),
     );
     validateResponse(response);
     var data = jsonDecode(response.body);
@@ -65,10 +69,11 @@ abstract class BaseProvider<T> with ChangeNotifier {
   Future<T> insert(dynamic request) async {
     var url = "$_baseUrl$endpoint";
     var uri = Uri.parse(url);
-    var headers = createHeaders();
-
     var jsonRequest = jsonEncode(request);
-    var response = await http.post(uri, headers: headers, body: jsonRequest);
+
+    var response = await _sendWithAuthRetry(
+      (headers) => http.post(uri, headers: headers, body: jsonRequest),
+    );
 
     validateResponse(response);
     var data = jsonDecode(response.body);
@@ -78,10 +83,11 @@ abstract class BaseProvider<T> with ChangeNotifier {
   Future<T> update(int id, [dynamic request]) async {
     var url = "$_baseUrl$endpoint/$id";
     var uri = Uri.parse(url);
-    var headers = createHeaders();
-
     var jsonRequest = jsonEncode(request);
-    var response = await http.put(uri, headers: headers, body: jsonRequest);
+
+    var response = await _sendWithAuthRetry(
+      (headers) => http.put(uri, headers: headers, body: jsonRequest),
+    );
 
     validateResponse(response);
     var data = jsonDecode(response.body);
@@ -91,11 +97,32 @@ abstract class BaseProvider<T> with ChangeNotifier {
   Future remove(int id) async {
     var url = "$_baseUrl$endpoint/$id";
     var uri = Uri.parse(url);
-    var headers = createHeaders();
 
-    var response = await http.delete(uri, headers: headers);
+    var response = await _sendWithAuthRetry(
+      (headers) => http.delete(uri, headers: headers),
+    );
 
     validateResponse(response);
+  }
+
+  // Runs one request; on a 401, tries exactly one silent token refresh and retries the same
+  // request once with the new access token before giving up. If the refresh itself fails
+  // (refresh token missing/expired/already used), the original 401 response is returned
+  // unchanged and validateResponse's existing "session expired" handling below takes over —
+  // same behavior as before this existed, just now with a chance to avoid it entirely.
+  Future<Response> _sendWithAuthRetry(
+    Future<Response> Function(Map<String, String> headers) send,
+  ) async {
+    var response = await send(createHeaders());
+
+    if (response.statusCode == 401) {
+      final refreshed = await AuthProvider.tryRefreshAccessToken();
+      if (refreshed) {
+        response = await send(createHeaders());
+      }
+    }
+
+    return response;
   }
 
   T fromJson(dynamic data) {
